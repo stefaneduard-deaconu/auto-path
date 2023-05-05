@@ -1,6 +1,6 @@
-from collections import defaultdict
 import itertools
 import math
+from collections import defaultdict
 from types import NoneType
 
 from typing import Union, Optional, Iterable, Hashable, Callable
@@ -13,6 +13,9 @@ from auto_path.areas.utils import grid_neighbors_gen
 
 
 Coord = tuple[int, int]
+CoordReal = tuple[float, float]
+Coord3D = tuple[int, int, int]
+Coord3dReal = tuple[float, float, float]
 HSectionIndexPair = tuple[int, int]
 AreaIndex = Union[int, NoneType]
 CoordToAreaIndex = dict[Coord, AreaIndex]
@@ -24,7 +27,7 @@ SharedContour = dict[HSectionIndexPair, set[Coord]]
 class Graph:
     def __init__(self, num_nodes: int = None):
         self.num_nodes = num_nodes
-        self.edges: dict[int, set[int]] = defaultdict(set)
+        self.edges: dict[int, set[int]] = {}
 
     def add_edge(self, node1: int, node2: int):
         if not self.num_nodes:
@@ -53,9 +56,9 @@ class WeightedGraph(Graph):  # TODO Ed, IMPORTANT: is this graph usable only for
         """
         self._weight[(coord1, coord2)] is (hdiff, vdiff)
         """
-        self._weight = defaultdict(int)
+        self._weight = {}
         # use other type of edges:
-        self.edges: dict[Coord, set[Coord]] = defaultdict(set)
+        self.edges: dict[Coord, set[Coord]] = {}
         super().__init__(*args, **kwargs)
 
     def _connect_nodes_weighted(self,
@@ -229,6 +232,8 @@ class WeightedGraph(Graph):  # TODO Ed, IMPORTANT: is this graph usable only for
         return node1 in self.edges[node2]
 
     def get_neighbors(self, node: Coord):
+        if not self.edges.get(node):
+            self.edges[node] = set()
         return self.edges[node]
 
     # add infinite value
@@ -237,7 +242,8 @@ class WeightedGraph(Graph):  # TODO Ed, IMPORTANT: is this graph usable only for
 
     def _dijkstra_with_distance_fn(self,
                                    start: Coord, target: Coord,
-                                   dist_fn: Callable = lambda p1, p2: 1):
+                                   dist_fn: Callable = lambda p1, p2: 1) \
+            -> tuple[list[Coord], dict]:
         import heapq
 
         def dijkstra(graph, start, end):
@@ -270,7 +276,7 @@ class WeightedGraph(Graph):  # TODO Ed, IMPORTANT: is this graph usable only for
                         heapq.heappush(pq, (distance, neighbor))
             # If there is no path from start to end, return None
             if previous[end] is None:
-                return distances, None
+                return None, distances
             # Construct the shortest path from start to end by following the previous nodes backwards from end to start
             path = [end]
             while previous[path[0]] is not None:
@@ -288,7 +294,7 @@ class WeightedGraph(Graph):  # TODO Ed, IMPORTANT: is this graph usable only for
         # print(path)  # ['A', 'B', 'D']
 
         path, distances = dijkstra(self, start=start, end=target)
-        return distances, path
+        return path, distances
 
     def _is_inf(self, val: float):
         return math.isinf(val)
@@ -304,7 +310,7 @@ class WeightedGraph(Graph):  # TODO Ed, IMPORTANT: is this graph usable only for
             return dist if self.is_edge(node1, node2) \
                 else self.INF
 
-        distances, path = self._dijkstra_with_distance_fn(start=start, target=target,
+        path, distances = self._dijkstra_with_distance_fn(start=start, target=target,
                                                           dist_fn=distance)
         if not path:
             raise Exception('There was no path between the two objectives')
@@ -313,6 +319,7 @@ class WeightedGraph(Graph):  # TODO Ed, IMPORTANT: is this graph usable only for
     def dijkstra_by_length(self, start: Coord, target: Coord):
         """
         """
+
         def distance(p1: Coord, p2: Coord):
             from math import sqrt
             a, b = np.array([p1, p2])
@@ -320,29 +327,36 @@ class WeightedGraph(Graph):  # TODO Ed, IMPORTANT: is this graph usable only for
             return dist if self.is_edge(p1, p2) \
                 else self.INF
 
-        distances, path = self._dijkstra_with_distance_fn(start=start, target=target,
+        path, distances = self._dijkstra_with_distance_fn(start=start, target=target,
                                                           dist_fn=distance)
         if not path:
             raise Exception('There was no path between the two objectives')
         return path
 
-    def dijkstra_by_length_3d(self, start: Coord, end: Coord):
+    def dijkstra_by_length_3d(self, start: Coord, target: Coord):
         """
         """
+
         def distance(node1: Coord, node2: Coord):
             from math import sqrt
             hdist, vdist = self.weight(node1, node2)
-            dist_3d = sqrt(hdist**2 + vdist**2)
+            dist_3d = sqrt(hdist ** 2 + vdist ** 2)
             return dist_3d if self.is_edge(node1, node2) \
                 else self.INF
 
-        distances, path = self._dijkstra_with_distance_fn(start=start, target=target,
+        path, distances = self._dijkstra_with_distance_fn(start=start, target=target,
                                                           dist_fn=distance)
         if not path:
             raise Exception('There was no path between the two objectives')
         return path
 
 
+# class ProxyWGraph(WeightedGraph):
+#     def __init__(self, graph: HSectionsGraph,
+#                  area_idx_to_vdist: dict[int,int],
+#                  ):
+#         self._area_sections = area_sections
+#         super().__init__(*kargs, *kwargs)
 
 # util functions for graphs
 class HSection:
@@ -368,13 +382,13 @@ class HSectionsGraph:
         self._hsections = hsections
         self._num_nodes = len(self.nodes)
         self._shared_contour = shared_contour
-        self._edges: dict[int, set[int]] = defaultdict(set)
+        self._edges: dict[AreaIndex, set[AreaIndex]] = {}
         self._coord_to_area_idx = coord_to_area_idx
 
     def coord_to_area_idx(self, coord: Coord) -> AreaIndex:
         return self._coord_to_area_idx.get(coord)
 
-    def get_neighbors(self, area_idx: int) -> set[int]:
+    def get_neighbors(self, area_idx: int) -> set[AreaIndex]:
         # TODO Ed, this may be upgraded, because you have to iterate all edges...
         return self._edges[area_idx].copy()
 
@@ -388,13 +402,76 @@ class HSectionsGraph:
             errors.append(f"{node2} is not part of self.nodes={self.nodes}")
         if errors:
             raise Exception('Error while adding HSectionsGraph edge: ' + '\n  '.join(errors))
+        if not self._edges.get(node1):
+            self._edges[node1] = set()
         self._edges[node1].add(node2)
+        if not self._edges.get(node2):
+            self._edges[node2] = set()
         self._edges[node2].add(node1)
 
     def hsection(self, idx: int) -> HSection:
         return self._hsections[idx]
 
+    @property
+    def hsections(self) -> list[HSection]:
+        return self._hsections
+
     # TODO Ed, other useful functions, such as:
+    def dijkstra_for_objective(self, start: AreaIndex, target: AreaIndex) -> list[AreaIndex]:
+        import heapq
+        def dist_fn(node1: AreaIndex, node2: AreaIndex):
+            dist = 1
+            return dist if node1 in self._edges.get(node2) \
+                else self.INF
+        def dijkstra(graph: 'HSectionsGraph', start: AreaIndex, end: AreaIndex):
+            # Create a dictionary to store the distance from start to each node
+            distances = {node: float('inf') for node in graph.nodes}
+            # Set the distance from start to itself to be 0
+            distances[start] = 0
+            # Create a dictionary to store the previous node in the shortest path to each node
+            previous = defaultdict(lambda: None, {})  # instead of {node: None for node in graph.nodes}
+            # Create a priority queue to store nodes with their distances
+            pq = [(0, start)]
+            # While the priority queue is not empty
+            while pq:
+                # Get the node with the smallest distance from the priority queue
+                (dist, node) = heapq.heappop(pq)
+                # If we have already processed this node, continue to the next node
+                if dist > distances[node]:
+                    continue
+                # Update the distance to each neighbor of the current node
+                for neighbor in graph.get_neighbors(node):  # TODO Ed, implement WeightedGraph.node(idx)
+                    weight = dist_fn(node, neighbor)
+                    distance = dist + weight
+                    # If the distance to the neighbor through this node is smaller than the current distance to the neighbor
+                    if distance < distances[neighbor]:
+                        # Update the distance to the neighbor
+                        distances[neighbor] = distance
+                        # Set the previous node in the shortest path to be the current node
+                        previous[neighbor] = node
+                        # Add the neighbor and its distance to the priority queue
+                        heapq.heappush(pq, (distance, neighbor))
+            # If there is no path from start to end, return None
+            if previous[end] is None:
+                return None, distances
+            # Construct the shortest path from start to end by following the previous nodes backwards from end to start
+            path = [end]
+            while previous[path[0]] is not None:
+                path.insert(0, previous[path[0]])
+            return path, distances
+
+        # graph = {
+        #     'A': {'B': 2, 'C': 4},
+        #     'B': {'C': 1, 'D': 2},
+        #     'C': {'D': 1},
+        #     'D': {}
+        # }
+        # path, distances = dijkstra(graph, 'A', 'D')
+        # print(distances)  # {'A': 0, 'B': 2, 'C': 3, 'D': 4}
+        # print(path)  # ['A', 'B', 'D']
+
+        path, distances = dijkstra(self, start, target)
+        return path
 
 
 def generate_hsections_graph(surf: np.array) -> HSectionsGraph:
@@ -402,7 +479,7 @@ def generate_hsections_graph(surf: np.array) -> HSectionsGraph:
                      coord_to_area_idx: CoordToAreaIndex,
                      area_idx: int) -> tuple[set[Coord], int]:
         # if (i,j) is already part of an area, return empty set and unchanged area_idx
-        if coord_to_area_idx[(i, j)] is not None:
+        if coord_to_area_idx.get((i, j)) is not None:
             return set(), area_idx
 
         q = [(i, j)]
@@ -417,7 +494,7 @@ def generate_hsections_graph(surf: np.array) -> HSectionsGraph:
             coord_to_area_idx[(i, j)] = area_idx
 
             for i2, j2 in grid_neighbors_gen(i, j, *GRID_SIZE):
-                if coord_to_area_idx[(i2, j2)] is None and \
+                if coord_to_area_idx.get((i2, j2)) is None and \
                         math.isclose(mat[i, j], mat[i2, j2]):
                     q.append((i2, j2))
         return set(area), area_idx + 1
@@ -437,7 +514,11 @@ def generate_hsections_graph(surf: np.array) -> HSectionsGraph:
                 if pt2 not in a:
                     is_contour_pt = True
                     a2_idx = coord_to_area_idx[pt2]
+                    if not shared_contour.get((a_idx, a2_idx)):
+                        shared_contour[(a_idx, a2_idx)] = set()
                     shared_contour[(a_idx, a2_idx)].add(pt)
+                    if not shared_contour.get((a2_idx, a_idx)):
+                        shared_contour[(a2_idx, a_idx)] = set()
                     shared_contour[(a2_idx, a_idx)].add(pt2)
             if is_contour_pt:
                 contour.add(pt)
@@ -446,9 +527,9 @@ def generate_hsections_graph(surf: np.array) -> HSectionsGraph:
     GRID_SIZE = surf.shape
     # computed height sections:
     hsections = []
-    coord_to_area_idx: CoordToAreaIndex = defaultdict(lambda: None, {})
-    shared_contour: dict[HSectionIndexPair, set[Coord]] = defaultdict(set,
-                                                                      {})  # mapping of type    { (0,1) : {(),(),()}  meaning contour of "Sect 0", adjacent to "Sect 1"
+    coord_to_area_idx: CoordToAreaIndex = {}
+    shared_contour: dict[HSectionIndexPair, set[
+        Coord]] = {}  # mapping of type    { (0,1) : {(),(),()}  meaning contour of "Sect 0", adjacent to "Sect 1"
     # extract areas and contours
     curr_area_idx = 0
     # first extract areas

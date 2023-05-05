@@ -13,6 +13,11 @@ from perlin_numpy import (
 )
 
 from auto_path.areas.graph import WeightedGraph
+from auto_path.areas.utils import set_axes_equal
+
+import itertools
+
+from auto_path.areas.utils.interpolate import Coord3D
 
 
 # TODO move to pybezier library
@@ -66,11 +71,10 @@ class Area:
         self.GRID_SIZE = self.surf.shape
 
     @classmethod
-    def from_perlin_noise(cls, seed=None,
-                          GRID_SIZE=(200, 200),
-                          scaling_argument: tuple[int, int] = (1, 1),
-                          min_height: float = 0,
-                          max_height: float = 100):
+    def from_perlin_noise(cls, seed,
+                          GRID_SIZE: tuple[int,int],
+                          scaling_argument: tuple[int, int],
+                          height_interval: tuple[int,int]):
         """
         Summary
 
@@ -78,18 +82,33 @@ class Area:
 
         So the grid size is 200 x 200.
         """
-        if seed is None:
-            seed = random.randint(0, 100)
+        min_height, max_height = height_interval
         # generate surface
         np.random.seed(seed)
         height_interval = max_height - min_height
         surf = generate_perlin_noise_2d(GRID_SIZE, scaling_argument) * height_interval + min_height  # TODO Ed, 4,4 ?
-        # TODO keep between a range such as minimum height and maximum height
-        return cls(surf, min_height=min_height, max_height=max_height)
+        # also generate a random objective to start with
+        area = cls(surf, min_height=min_height, max_height=max_height)
+        area.generate_objective()
+        return area
+
+    @property
+    def pts3d(self) -> list[Coord3D]:
+        return [(x,y,self.surf[x,y])
+                for x,y in itertools.product(range(self.dim1),
+                                             range(self.dim2))]
 
     @property
     def shape(self):
         return np.array(self.surf.shape)
+
+    @property
+    def dim1(self):
+        return self.surf.shape[0]
+
+    @property
+    def dim2(self):
+        return self.surf.shape[1]
 
     def set_objective(self, start: np.array, target: np.array):
         self.start, self.target = [(int(x), int(y))
@@ -131,39 +150,7 @@ class Area:
         # ax.scatter(x,y,z)
         # ax.scatter([coord[0]], [coord[1]], [g])
         # plt.show()
-        return g
-
-    @classmethod
-    def set_axes_equal(cls, ax):
-        '''
-        ORIGIN: https://stackoverflow.com/questions/13685386/matplotlib-equal-unit-length-with-equal-aspect-ratio-z-axis-is-not-equal-to
-        TIME: 4/23/2023 17:05 EEST
-
-        Make axes of 3D plot have equal scale so that spheres appear as spheres,
-        cubes as cubes, etc..  This is one possible solution to Matplotlib's
-        ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
-
-        Input
-          ax: a matplotlib axis, e.g., as output from plt.gca().
-        '''
-        x_limits = ax.get_xlim3d()
-        y_limits = ax.get_ylim3d()
-        z_limits = ax.get_zlim3d()
-
-        x_range = abs(x_limits[1] - x_limits[0])
-        x_middle = np.mean(x_limits)
-        y_range = abs(y_limits[1] - y_limits[0])
-        y_middle = np.mean(y_limits)
-        z_range = abs(z_limits[1] - z_limits[0])
-        z_middle = np.mean(z_limits)
-
-        # The plot bounding box is a sphere in the sense of the infinity
-        # norm, hence I call half the max range the plot radius.
-        plot_radius = 0.5 * max([x_range, y_range, z_range])
-
-        ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
-        ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
-        ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+        return g    
 
     @classmethod
     def _plot_surf_3d(cls, z: np.array,
@@ -174,7 +161,8 @@ class Area:
                       ax: Axes3D = None,
                       axis: str = '',
                       use_tk: bool = True,
-                      alpha: float = 1):
+                      alpha: float = 1,
+                      flip=True):
         """
         TODO Also return the ax,fig,surf :)
         :param surf:
@@ -182,6 +170,8 @@ class Area:
         :param ys:
         :return:
         """
+        # if flip:
+        #     z = z.T
         cls._set_backend(use_tk=use_tk)
         if xs is None:
             xs = np.arange(len(z[0]))
@@ -209,11 +199,19 @@ class Area:
         # ax.zaxis.set_major_formatter('{x:.02f}')
 
         # Add a color bar which maps values to colors.
-        fig.colorbar(surf, shrink=0.5, aspect=5)
+        """
+        im = ax.imshow(surf, cmap='Blues', interpolation='lanczos')  # TODO Ed, IT DOES INTERPOLATE
+        # create custom colorbar
+        from mpl_toolkits.axes_grid1 import make_axes_locatable
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes('right', size='5%', pad=0.15)
+        cbar = fig.colorbar(im, cax=cax, orientation='vertical')
+        """
+        fig.colorbar(surf, fraction=.05)
 
         # After plotting all data:
         if axis == 'equal':
-            Area.set_axes_equal(ax)
+            set_axes_equal(ax)
 
         return ax, fig, surf
 
@@ -238,7 +236,7 @@ class Area:
 
     def plot_terrain_3d(self,
                         ax: Axes3D = None,
-                        fig: Axes3D = None,
+                        fig: Figure = None,
                         axis: str = '',
                         noshow: bool = False,
                         use_tk: bool = True):
@@ -274,17 +272,17 @@ class Area:
         print(f"Using matplotlib backend={matplotlib.get_backend()}")
 
 
-def interpolate_3d_line(area: Area,
-                        start: tuple[int, int],
-                        target: tuple[int, int]) -> list[tuple[int, int]]:
-    line_length = segment_length(np.array([start, target]))
-    line = []
-    a, b = np.array(start), np.array(target)  # TODO Ed, can be np.array([start, target])
-    for i in np.linspace(0, 1, math.ceil(line_length)):
-        coord = a * (1 - i) + b
-        h = area.interpolate_height(coord=coord)
-        line.append([*coord, h])
-    return np.array(line)
+# def interpolate_3d_line(area: Area,
+#                         start: tuple[int, int],
+#                         target: tuple[int, int]) -> list[tuple[int, int]]:
+#     line_length = segment_length(np.array([start, target]))
+#     line = []
+#     a, b = np.array(start), np.array(target)  # TODO Ed, can be np.array([start, target])
+#     for i in np.linspace(0, 1, math.ceil(line_length)):
+#         coord = a * (1 - i) + b
+#         h = area.interpolate_height(coord=coord)
+#         line.append([*coord, h])
+#     return np.array(line)
 
 
 def interpolate_using_bezier_curve(area: Area,
