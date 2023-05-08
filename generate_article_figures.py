@@ -4,16 +4,17 @@ from matplotlib.patches import Circle
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from auto_path.areas.area import segment_length
-from auto_path.areas.utils import set_axes_equal, create_subplots
-from auto_path.areas.utils.interpolate import remove_bad_points, path_length, interpolate_2d_path_as_is, direction
-from auto_path.main import *
+from areas.area import segment_length
+from areas.utils import set_axes_equal, create_subplots
+from areas.utils.interpolate import remove_bad_points, path_length, interpolate_2d_path_as_is, direction
+from main import *
 
 import math
 
 import matplotlib
 
-matplotlib.use('TkAgg')
+# # TODO Ed, cannot use in headless mode:
+# matplotlib.use('TkAgg')
 
 SCALE = 10
 
@@ -43,7 +44,7 @@ if __name__ == '__main__':
             "Figure_8": False,
             "Figure_9": True,
             "Figure_10": True}
-
+    breakpoint()
     # TODO Figure 1. Terrain (3D grid)
     if plot_all or plot['Figure_1']:
         fig, ax = create_3d_subplots(1, 1, figsize=(6, 6))
@@ -104,6 +105,7 @@ if __name__ == '__main__':
         plt.show()
 
     # TODO Figure 3 - plotting the Dijkstra path
+    breakpoint()
     paths = e.test_dijkstra_variants(cache=True, noshow=True)
     path_height = paths['height']
     if plot_all or plot['Figure_3']:

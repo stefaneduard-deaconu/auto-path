@@ -8,8 +8,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from auto_path.areas.area_sections import Area, AreaSections
-from auto_path.areas.area import eucl, interpolate_using_bezier_curve
+from areas.area_sections import Area, AreaSections
+from areas.area import eucl, interpolate_using_bezier_curve
 
 # if __name__ == '__main__':
 #     # # section the area by height :)
@@ -57,9 +57,9 @@ from auto_path.areas.area import eucl, interpolate_using_bezier_curve
 from functools import wraps
 import time
 
-from auto_path.areas.graph import generate_hsections_graph, Coord
-from auto_path.areas.utils import create_3d_subplots, set_axes_equal
-from auto_path.areas.utils.interpolate import interpolate_2d_path
+from areas.graph import generate_hsections_graph, Coord
+from areas.utils import create_3d_subplots, set_axes_equal
+from areas.utils.interpolate import interpolate_2d_path
 
 
 def timeit(func):
@@ -117,7 +117,7 @@ def timer(codeblock_name: str):
     # End the timer
     time_elapsed = time.time() - start
     # Tell the user how much time elapsed
-    print(f'<<{codeblock_name}>> executed in {"%.4f" % time_elapsed} seconds.')
+    print(f'```{codeblock_name}``` executed in {"%.4f" % time_elapsed} seconds.')
 
 
 @dataclasses.dataclass(unsafe_hash=True)

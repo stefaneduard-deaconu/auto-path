@@ -8,18 +8,18 @@ from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d import Axes3D
 
 # import area utils
-from auto_path.areas.area import Area
-from auto_path.areas.graph import Graph, generate_hsections_graph, WeightedGraph, Coord, CoordReal, Coord3dReal, \
+from areas.area import Area
+from areas.graph import Graph, generate_hsections_graph, WeightedGraph, Coord, CoordReal, Coord3dReal, \
     AreaIndex
 # import graph utils
-from auto_path.areas.graph import generate_hsections_graph
-from auto_path.areas.custom_colors import colors
+from areas.graph import generate_hsections_graph
+from areas.custom_colors import colors
 
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
-from auto_path.areas.utils import minmax, are_grid_neighbors, are_corner_neighbors, grid_neighbors_gen, create_subplots, \
+from areas.utils import minmax, are_grid_neighbors, are_corner_neighbors, grid_neighbors_gen, create_subplots, \
     create_3d_subplots
 
 

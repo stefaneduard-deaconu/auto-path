@@ -7,7 +7,7 @@ from typing import Union, Optional, Iterable, Hashable, Callable
 
 import numpy as np
 
-from auto_path.areas.utils import grid_neighbors_gen
+from areas.utils import grid_neighbors_gen
 
 # Types:
 
