@@ -44,7 +44,7 @@ if __name__ == '__main__':
             "Figure_8": False,
             "Figure_9": True,
             "Figure_10": True}
-    breakpoint()
+
     # TODO Figure 1. Terrain (3D grid)
     if plot_all or plot['Figure_1']:
         fig, ax = create_3d_subplots(1, 1, figsize=(6, 6))
@@ -105,8 +105,7 @@ if __name__ == '__main__':
         plt.show()
 
     # TODO Figure 3 - plotting the Dijkstra path
-    breakpoint()
-    paths = e.test_dijkstra_variants(cache=True, noshow=True)
+    paths = e.test_dijkstra_variants(cache=True, noshow=True)  # uses 100% of a single cpu, which is not good enough
     path_height = paths['height']
     if plot_all or plot['Figure_3']:
         # # TODO Ed, 3D
