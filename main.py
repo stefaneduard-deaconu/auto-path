@@ -124,9 +124,14 @@ def timer(codeblock_name: str):
 class TerrainGeneratorConfig:
     seed: int
     GRID_SIZE: tuple[int, int]
-    scaling_argument: tuple[int, int]
+    scaling_argument: tuple[int, int]  # TODO Ed, rename to default name
     height_interval: tuple[int, int]
     height_delta: int
+
+    # json properties
+    @property
+    def to_json(self):
+        return self.__dict__
 
     def __init__(self, 
                  seed, GRID_SIZE, scaling_argument, height_interval, height_delta):
@@ -187,6 +192,11 @@ class Experiment:
             with timer('NO CACHE => generate and cache'):
                 self._generate_from_scratch()
                 self.to_cache()
+
+    # json methods
+    @property
+    def json_terrain(self):
+        return self.area.to_json()
 
     @property
     def cache_fn(self):

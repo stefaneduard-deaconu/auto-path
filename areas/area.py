@@ -92,6 +92,16 @@ class Area:
         area.generate_objective()
         return area
 
+    # json function
+    def to_json(self):
+        return {
+            'min_height': self.min_height,
+            'max_height': self.max_height,
+            'grid_size': self.GRID_SIZE,
+            'surf': self.surf.tolist(),
+        }
+
+
     @property
     def pts3d(self) -> list[Coord3D]:
         return [(x,y,self.surf[x,y])

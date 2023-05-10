@@ -1,18 +1,29 @@
-def fibn_generator(n: int):
-    """
-    generates first n fibonacci numbers.
-    """
-    # edge cases
-    if n == 0:
-        return 1
-    elif n == 1:
-        return 1, 1
-    # general case
-    f0, f1 = 1, 1
-    yield 1  # for i=0
-    yield 1  # for i=1
-    for i in range(2, n):
-        fn = f0 + f1
-        yield fn
-        f0 = f1
-        f1 = fn
+
+from main import TerrainGeneratorConfig
+# helper builtins
+import itertools
+
+
+def generate_configs_grid_based(seeds: list[int],
+                                GRID_SIZES: list[tuple[int, int]],
+                                scaling_arguments: list[tuple[int, int]],
+                                height_intervals: list[tuple[int, int]],
+                                height_deltas: list[int]) \
+        -> list[TerrainGeneratorConfig]:
+    configs = []
+    for config_args in itertools.product(seeds,
+                                         GRID_SIZES,
+                                         scaling_arguments,
+                                         height_intervals,
+                                         height_deltas):
+        gs, sa = config_args[1], config_args[2]
+        # possible error: scaling_argument doesn't divide GRID_SIZE
+        if gs[0] % sa[0] != 0:
+            continue
+        if gs[1] % sa[1] != 0:
+            continue
+        
+        cfg = TerrainGeneratorConfig(*config_args)
+        configs.append(cfg)
+        
+    return configs
