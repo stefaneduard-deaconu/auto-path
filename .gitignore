@@ -1,7 +1,8 @@
 venv/
 *.json
 *.pkl
-
+# local caching of experiment data
+experiments/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
