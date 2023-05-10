@@ -128,6 +128,14 @@ class TerrainGeneratorConfig:
     height_interval: tuple[int, int]
     height_delta: int
 
+    def __init__(self, 
+                 seed, GRID_SIZE, scaling_argument, height_interval, height_delta):
+        self.seed = seed
+        self.GRID_SIZE = tuple(GRID_SIZE)
+        self.scaling_argument = tuple(scaling_argument)
+        self.height_interval = tuple(height_interval)
+        self.height_delta = height_delta
+
     @property
     def for_area(self):
         return {k: v
