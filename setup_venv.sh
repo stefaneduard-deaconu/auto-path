@@ -6,5 +6,6 @@ pip3.10 install numpy \
                 scipy \
                 matplotlib \
                 redis \
-                celery
+                celery \
+                pymongo
 pip3.10 install git+https://github.com/pvigier/perlin-numpy
