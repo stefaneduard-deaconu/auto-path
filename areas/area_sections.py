@@ -1,14 +1,14 @@
 import functools
 import math
 from collections import defaultdict
-from typing import Hashable, Optional, Iterable, Callable
+from typing import Hashable, Optional, Iterable, Callable, Union
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from mpl_toolkits.mplot3d import Axes3D
 
 # import area utils
-from areas.area import Area
+from areas.area import Terrain
 from areas.graph import Graph, generate_hsections_graph, WeightedGraph, Coord, CoordReal, Coord3dReal, \
     AreaIndex
 # import graph utils
@@ -21,15 +21,19 @@ import matplotlib.pyplot as plt
 
 from areas.utils import minmax, are_grid_neighbors, are_corner_neighbors, grid_neighbors_gen, create_subplots, \
     create_3d_subplots
+from cache import HaCache
 
 
 def compute_height_sections(surf: np.array, height_delta: float):
     minn, maxx = surf.min(), surf.max()
     height_delta = int(height_delta)
-    buckets = [i for i in range(math.floor(minn), math.ceil(maxx), height_delta)]
-    buckets.append(int(maxx))
-    find_bucket = lambda x: (x - minn) // height_delta
-    find_new_value = lambda x: minn + height_delta * find_bucket(x)
+    buckets: list[float] = [
+        i for i in range(math.floor(minn),
+                         math.ceil(maxx),
+                         height_delta)]
+    buckets.append(int(maxx))  # TODO Ed, can it apply for float?
+    def find_bucket(x): return (x - minn) // height_delta
+    def find_new_value(x): return minn + height_delta * find_bucket(x)
     # print(buckets)
     # print(noise[0, 0],
     #       find_bucket(noise[0, 0]),
@@ -38,38 +42,65 @@ def compute_height_sections(surf: np.array, height_delta: float):
     return transform(surf), buckets
 
 
-class AreaSections:
-    def __init__(self,
-                 orig_area: Area,  # TODO Ed, eliminate if possible
-                 height_delta: float,
-                 generate_full_graphs: bool = False):
-        self.orig_area = orig_area
-        self.height_delta = height_delta
-        # modify the surface data:
-        self.surf_h, self.buckets = compute_height_sections(orig_area.surf, height_delta=height_delta)
-        # # TODO Ed remove, plot the result:
-        # self.plot_heatmap()
-        # self.show()
+class HeightSections:
 
-        # TODO may be better to abstractize the list of sets?,
-        #  to simply use the ids of any type (int,str etc)
-        self.graph = generate_hsections_graph(self.surf_h)
-        # vertical dist = number of elevation changes
-        self.area_idx_to_vdist: dict[int, int] = {}
-        self._map_graphs_to_vdist()
-        # # TODO Ed, Deprecated: retaining full graph is not wanted
-        # self.full_graphs: dict[int, WeightedGraph] = {}
-        # if generate_full_graphs:
-        #     self._generate_all_graphs()
-        # TODO Ed, new features: setting up the mock graph
-        self._mock_graph = AreaSections.MockGraph(self)
+    def __str__(self) -> str:
+        return f'''Experiment(surf_h=array of shape {self.surf_h.shape},
+        height_delta={self.height_delta},
+        buckets={self.buckets})'''
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    @classmethod
+    def from_cached(cls, data: HaCache):
+        return HeightSections(**data)
+
+    @classmethod
+    def from_orig_area(cls,
+                       orig_area: Terrain,
+                       height_delta: float):
+        surf_h,  buckets = \
+            compute_height_sections(orig_area.surf, height_delta=height_delta)
+        return HeightSections(orig_area=orig_area,
+                              height_delta=height_delta,
+                              buckets=buckets,
+                              surf_h=surf_h)
+
+    def _set_orig_area(self, orig_area: Terrain):
+        self.orig_area = orig_area
+
+    def __init__(self,
+                 orig_area: Terrain = None,  # TODO Ed, eliminate if possible, not needed
+                 height_delta: float = None,
+                 buckets: list[float] = None,
+                 surf_h: Union[list[list[int]],
+                               np.array] = None):
+        self.orig_area: Terrain = orig_area
+        self.height_delta = height_delta
+        self.surf_h = np.array(surf_h)
+        self.buckets = buckets
+        # self.surf_h, \
+        #     self.buckets = compute_height_sections(
+        #         orig_area.surf, height_delta=height_delta)
+        # # TODO Ed, this will be the hag: and will contain both graph, areaidxtovdist etc
+        # self.graph = generate_hsections_graph(self.surf_h)
+        # # vertical dist = number of elevation changes
+        # self.area_idx_to_vdist: dict[int, int] = {}
+        # self._map_graphs_to_vdist()
+        # # # TODO Ed, Deprecated: retaining full graph is not wanted
+        # # self.full_graphs: dict[int, WeightedGraph] = {}
+        # # if generate_full_graphs:
+        # #     self._generate_all_graphs()
+        # # TODO Ed, new features: setting up the mock graph
+        # self._mock_graph = AreaSections.MockGraph(self)
 
     @property
     def mgraph(self):
         return self._mock_graph
 
     def update_mock_graph(self):
-        self._mock_graph = AreaSections.MockGraph(self)
+        self._mock_graph = HeightSections.MockGraph(self)
 
     @property
     def area_ids(self) -> set[int]:
@@ -83,7 +114,7 @@ class AreaSections:
                 if vd <= max_vdist}
 
     class MockGraph:
-        def __init__(self, area_sections: 'AreaSections'):
+        def __init__(self, area_sections: 'HeightSections'):
             self._as = area_sections
 
         def available_areas_ids(self):  # TODO Ed, necessary?
@@ -132,7 +163,7 @@ class AreaSections:
             return ln, dh
 
         @classmethod
-        def from_area_sections(cls, area_sections: 'AreaSections'):
+        def from_area_sections(cls, area_sections: 'HeightSections'):
             return cls(area_sections)
 
         # TODO Ed, helper methods for graph algos
@@ -156,8 +187,10 @@ class AreaSections:
             return set(neighbors)
 
         # add infinite value
-        INF = float('inf')  # bacause it measures distances in multiple of meters
-        INF_MINUS = float('-inf')  # bacause it measures distances in multiple of meters
+        # bacause it measures distances in multiple of meters
+        INF = float('inf')
+        # bacause it measures distances in multiple of meters
+        INF_MINUS = float('-inf')
 
         def _dijkstra_with_distance_fn(self,
                                        start: Coord, target: Coord,
@@ -171,7 +204,8 @@ class AreaSections:
                 # Set the distance from start to itself to be 0
                 distances[start] = 0
                 # Create a dictionary to store the previous node in the shortest path to each node
-                previous = defaultdict(lambda: None, {})  # instead of {node: None for node in graph.nodes}
+                # instead of {node: None for node in graph.nodes}
+                previous = defaultdict(lambda: None, {})
                 # Create a priority queue to store nodes with their distances
                 pq = [(0, start)]
                 # While the priority queue is not empty
@@ -182,7 +216,8 @@ class AreaSections:
                     if dist > distances[node]:
                         continue
                     # Update the distance to each neighbor of the current node
-                    for neighbor in graph.get_neighbors(node):  # TODO Ed, implement WeightedGraph.node(idx)
+                    # TODO Ed, implement WeightedGraph.node(idx)
+                    for neighbor in graph.get_neighbors(node):
                         weight = dist_fn(node, neighbor)
                         distance = dist + weight
                         # If the distance to the neighbor through this node is smaller than the current distance to the neighbor
@@ -327,7 +362,8 @@ class AreaSections:
             set())
         surf = self.orig_area.surf
         # TODO Ed, keep the graph in memory
-        self.full_graphs[vdist] = WeightedGraph.from_available_surface(available_area, surf)
+        self.full_graphs[vdist] = WeightedGraph.from_available_surface(
+            available_area, surf)
         return self.full_graphs[vdist]
 
     def area(self, area_idx) -> set[Coord]:
@@ -366,8 +402,8 @@ class AreaSections:
         return self.surf_h[pt_in_area]
 
     @classmethod
-    def from_area(cls, area: Area, height_delta: float):
-        return AreaSections(orig_area=area, height_delta=height_delta)
+    def from_area(cls, area: Terrain, height_delta: float):
+        return HeightSections(orig_area=area, height_delta=height_delta)
 
     @property
     def start(self):
@@ -393,7 +429,8 @@ class AreaSections:
         surf = surf.T if flip else surf
         # plot image
         # im = ax.imshow(surf, cmap='Blues', interpolation='antialiased')  # TODO Ed, IT DOES INTERPOLATE
-        im = ax.imshow(surf, cmap='Blues', interpolation='nearest')  # TODO Ed, IT DOES INTERPOLATE
+        # TODO Ed, IT DOES INTERPOLATE
+        im = ax.imshow(surf, cmap='Blues', interpolation='nearest')
         # create custom colorbar
         from mpl_toolkits.axes_grid1 import make_axes_locatable
         divider = make_axes_locatable(ax)
@@ -491,7 +528,8 @@ class AreaSections:
                      ax: Axes = None,
                      plot_objective: bool = True):  # TODO Ed, enable mpl backend update using a method which returns self
         if self.surf_h is None:
-            raise NotImplementedError('You should first run compute_height_sections')
+            raise NotImplementedError(
+                'You should first run compute_height_sections')
         self._plot_surf(self.surf_h, fig=fig, ax=ax,
                         plot_objective=plot_objective)
 
@@ -566,12 +604,12 @@ class AreaSections:
         maxx += border
         maxy += border
         partial_surf = self.orig_area.surf[minx:maxx,
-                       miny:maxy]
-        Area._plot_surf_3d(partial_surf,
-                           colormap="Blues",
-                           ax=ax,
-                           fig=fig,
-                           alpha=.5)
+                                           miny:maxy]
+        Terrain._plot_surf_3d(partial_surf,
+                              colormap="Blues",
+                              ax=ax,
+                              fig=fig,
+                              alpha=.5)
         # plot path  # TODO Ed, also transform Coord to start with 0,0. Also include some margin
         # TODO Ed, this could be a functiona
         x = [xcoord - minx + border // 2
@@ -580,8 +618,10 @@ class AreaSections:
              for ycoord in y]
         ax.plot(y, x, h[::-1], c='red', lw=2)  # TODO Ed, why?
         # add start and target points
-        start = np.array(self.start) + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
-        target = np.array(self.target) + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
+        start = np.array(self.start) + (- minx + border //
+                                        2, - miny + border // 2)  # TODO Ed, why?
+        target = np.array(self.target) + (- minx + border //
+                                          2, - miny + border // 2)  # TODO Ed, why?
         start3d = np.array([*start, self.coord_to_height(tuple(start))])
         target3d = np.array([*target, self.coord_to_height(tuple(target))])
         self._plot_objective_3d(fig=fig,
@@ -615,11 +655,11 @@ class AreaSections:
         maxy += border
         partial_surf = self.orig_area.surf[int(minx):int(maxx),
                                            int(miny):int(maxy)]
-        Area._plot_surf_3d(partial_surf,
-                           colormap="Blues",
-                           ax=ax,
-                           fig=fig,
-                           alpha=.5)
+        Terrain._plot_surf_3d(partial_surf,
+                              colormap="Blues",
+                              ax=ax,
+                              fig=fig,
+                              alpha=.5)
         # plot path  # TODO Ed, also transform Coord to start with 0,0. Also include some margin
         # TODO Ed, this could be a functiona
         x = [xcoord - minx + border // 2
@@ -628,10 +668,13 @@ class AreaSections:
              for ycoord in y]
         ax.plot(y, x, h[::-1], c='red', lw=4)  # TODO Ed, why?
         # add start and target points
-        start = np.array(self.start) + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
-        target = np.array(self.target) + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
+        start = np.array(self.start) + (- minx + border //
+                                        2, - miny + border // 2)  # TODO Ed, why?
+        target = np.array(self.target) + (- minx + border //
+                                          2, - miny + border // 2)  # TODO Ed, why?
         start3d = np.array([*start, self.interpolate_height(np.array(start))])
-        target3d = np.array([*target, self.interpolate_height(np.array(target))])
+        target3d = np.array(
+            [*target, self.interpolate_height(np.array(target))])
         self._plot_objective_3d(fig=fig,
                                 ax=ax,
                                 start3d=start3d,
@@ -668,8 +711,10 @@ class AreaSections:
         # TODO Ed, this could be a functiona
         ax.plot(x, y, c='red', lw=2)  # TODO Ed, why?
         # add start and target points
-        start = np.array(self.start)  # + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
-        target = np.array(self.target)  # + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
+        # + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
+        start = np.array(self.start)
+        # + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
+        target = np.array(self.target)
         self._plot_objective_2d(fig=fig,
                                 ax=ax,
                                 start=start,
@@ -698,7 +743,7 @@ class AreaSections:
         while lt <= rt:
             curr_idx = selected[lt]
             neighbors = [area_idx for area_idx in self.graph.get_neighbors(curr_idx)
-                         if area_idx not in selected and \
+                         if area_idx not in selected and
                          hmin <= self.area_to_height(area_idx) <= hmax]
             selected.extend(neighbors)
             # update pointers
@@ -727,7 +772,8 @@ class AreaSections:
             'black'
         ]
         MIDDLE = 5  # 'moccasin'
-        start_height = self.coord_to_height(tuple(self.start))  # TODO Ed, call tuple?
+        start_height = self.coord_to_height(
+            tuple(self.start))  # TODO Ed, call tuple?
         for i, idx in enumerate(selected_area_ids):
             area = self.areas[idx]
             a_coord = next(iter(area))

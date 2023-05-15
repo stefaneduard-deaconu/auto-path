@@ -18,6 +18,7 @@ from areas.utils import set_axes_equal
 import itertools
 
 from areas.utils.interpolate import Coord3D
+from cache import TerrainCache
 
 
 # TODO move to pybezier library
@@ -56,22 +57,32 @@ def compute_bezier_curve(pts: np.array, spacing=.1) -> np.array:
     return np.array(points)
 
 
-class Area:
+class Terrain:  # TODO Ed, remove start, target
     def __init__(self, surf: np.array,
                  start: np.array = None, target: np.array = None,
                  min_height: float = None, max_height: float = None):
-        self.surf = surf
-        if start is None or target is None:
-            self.start, self.target = None, None
-        else:
-            self.start, self.target = [(int(x), int(y))
-                                       for x, y in [start, target]]
+        """
+        surf is a non-empty 2D numpy array
+        """
+        self.surf = np.array(surf)
         self.min_height = min_height
         self.max_height = max_height
-        self.GRID_SIZE = self.surf.shape
+
+    def __str__(self) -> str:
+        return f'''Terrain(surf=array of {self.surf.shape} items,
+        min_height={self.min_height},
+        max_height={self.max_height})'''
+
+    def __repr__(self) -> str:
+        return self.__str__()
+    
+    @property
+    def GRID_SIZE(self) -> tuple[int,int]:
+        return self.surf.shape
 
     @classmethod
-    def from_perlin_noise(cls, seed,
+    def from_perlin_noise(cls, *, 
+                          seed: int,
                           GRID_SIZE: tuple[int,int],
                           scaling_argument: tuple[int, int],
                           height_interval: tuple[int,int]):
@@ -85,22 +96,17 @@ class Area:
         min_height, max_height = height_interval
         # generate surface
         np.random.seed(seed)
-        height_interval = max_height - min_height
-        surf = generate_perlin_noise_2d(GRID_SIZE, scaling_argument) * height_interval + min_height  # TODO Ed, 4,4 ?
-        # also generate a random objective to start with
-        area = cls(surf, min_height=min_height, max_height=max_height)
-        area.generate_objective()
-        return area
+        height_delta = max_height - min_height
+        surf = generate_perlin_noise_2d(GRID_SIZE, scaling_argument) * height_delta + min_height
+        return cls(surf, min_height=min_height, max_height=max_height)
 
     # json function
-    def to_json(self):
+    def to_json(self) -> TerrainCache:
         return {
             'min_height': self.min_height,
             'max_height': self.max_height,
-            'grid_size': self.GRID_SIZE,
             'surf': self.surf.tolist(),
         }
-
 
     @property
     def pts3d(self) -> list[Coord3D]:
@@ -120,21 +126,21 @@ class Area:
     def dim2(self):
         return self.surf.shape[1]
 
-    def set_objective(self, start: np.array, target: np.array):
-        self.start, self.target = [(int(x), int(y))
-                                   for x, y in [start, target]]
+    # def set_objective(self, start: np.array, target: np.array):
+    #     self.start, self.target = [(int(x), int(y))
+    #                                for x, y in [start, target]]
 
-    def generate_objective(self, seed: int = None):
-        if seed is not None:
-            np.random.seed(seed)
-        self.start, self.target = [(int(x), int(y))
-                                   for x, y in np.random.rand(2, 2) * self.GRID_SIZE]
+    # def generate_objective(self, seed: int = None):
+    #     if seed is not None:
+    #         np.random.seed(seed)
+    #     self.start, self.target = [(int(x), int(y))
+    #                                for x, y in np.random.rand(2, 2) * self.GRID_SIZE]
 
     def _plot_surf(self, surf: np.array, flip: bool = True):
         surf = surf.T if flip else surf
         plt.imshow(surf, cmap='Blues', interpolation='lanczos')
         plt.colorbar()
-        plt.scatter(*zip(*[self.start, self.target]), c=['red'])
+        # plt.scatter(*zip(*[self.start, self.target]), c=['red'])
 
     def plot_terrain(self):
         self._plot_surf(self.surf)
@@ -236,7 +242,7 @@ class Area:
         y1, y2 = pt[1] - radius, pt[1] + radius + 1
         x = np.arange(x1, x2)
         y = np.arange(y1, y2)
-        fig, ax, surf = Area._plot_surf_3d(z=self.surf[x1:x2, y1:y2],
+        fig, ax, surf = Terrain._plot_surf_3d(z=self.surf[x1:x2, y1:y2],
                                            xs=x,
                                            ys=y)
         px, py = pt
@@ -250,7 +256,7 @@ class Area:
                         axis: str = '',
                         noshow: bool = False,
                         use_tk: bool = True):
-        ax, fig, surf = Area._plot_surf_3d(self.surf,
+        ax, fig, surf = Terrain._plot_surf_3d(self.surf,
                                            colormap="Blues",
                                            ax=ax,
                                            fig=fig,
@@ -295,7 +301,7 @@ class Area:
 #     return np.array(line)
 
 
-def interpolate_using_bezier_curve(area: Area,
+def interpolate_using_bezier_curve(area: Terrain,
                                    waypoints: np.array) -> list[tuple[int, int]]:
     waypoints = np.array(waypoints)
     area.plot_terrain()

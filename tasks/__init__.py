@@ -1,5 +1,5 @@
 from app import app
 
 # import tasks
-from .terrain import task_terrain_from_config
+from .terrain import *  # TODO Ed, or actually write them?
 # from .planner import *  # TODO will use for tasks applied for path planning

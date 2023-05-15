@@ -1,3 +1,4 @@
+from typing import TypedDict
 import contextlib
 import dataclasses
 import time
@@ -8,7 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 
-from areas.area_sections import Area, AreaSections
+from areas.area_sections import Terrain, HeightSections
 from areas.area import eucl, interpolate_using_bezier_curve
 
 # if __name__ == '__main__':
@@ -60,6 +61,7 @@ import time
 from areas.graph import generate_hsections_graph, Coord
 from areas.utils import create_3d_subplots, set_axes_equal
 from areas.utils.interpolate import interpolate_2d_path
+from cache import ExperimentCache, TerrainCache, init_args
 
 
 def timeit(func):
@@ -81,17 +83,18 @@ def timeit(func):
 def slow_method_using_full_graph():
     """section the area by height as efficiently as possible:"""
 
-    a = Area.from_perlin_noise(seed=10, GRID_SIZE=(500, 500), min_height=200, max_height=300)
+    a = Terrain.from_perlin_noise(seed=10, GRID_SIZE=(
+        500, 500), min_height=200, max_height=300)
     a.generate_objective(seed=123)
     a.plot_terrain()
     a.show()
 
     @timeit
-    def compute_area_sections(a: Area,
+    def compute_area_sections(a: Terrain,
                               height_delta: float = 0,
                               max_hdiff: float = 0):
         # TODO Ed, task3 - implement better area sections computing
-        a_sections = AreaSections.from_area(area=a, height_delta=16)
+        a_sections = HeightSections.from_area(area=a, height_delta=16)
         a_sections.plot_grouped(max_hdiff=70)
         # plot heat map
         a_sections.plot_heatmap()
@@ -126,30 +129,32 @@ class TerrainGeneratorConfig:
     GRID_SIZE: tuple[int, int]
     scaling_argument: tuple[int, int]  # TODO Ed, rename to default name
     height_interval: tuple[int, int]
-    height_delta: int
 
     # json properties
     @property
     def to_json(self):
         return self.__dict__
 
-    def __init__(self, 
-                 seed, GRID_SIZE, scaling_argument, height_interval, height_delta):
+    # key property, which returns the unique hash
+    @property
+    def key(self) -> str:
+        return str(self.__hash__())
+
+    def __init__(self,
+                 seed, GRID_SIZE, scaling_argument, height_interval):
         self.seed = seed
         self.GRID_SIZE = tuple(GRID_SIZE)
         self.scaling_argument = tuple(scaling_argument)
         self.height_interval = tuple(height_interval)
-        self.height_delta = height_delta
+
+    # TODO Ed, remove for_area, because it's the only remaining one
+    @property
+    def to_json(self):
+        return self.__dict__
 
     @property
     def for_area(self):
-        return {k: v
-                for k, v in self.__dict__.items()
-                if k is not 'height_delta'}
-
-    @property
-    def for_area_sections(self):
-        return {"height_delta": self.height_delta}
+        return self.__dict__
 
 
 # TODO Ed, current task
@@ -164,36 +169,63 @@ class CacheFileNotFoundException(Exception):
 
 class Experiment:
     def __init__(self,
-                 config: TerrainGeneratorConfig):
-        self.config = config
-        self.area: Area = None
-        self.area_sections: AreaSections = None
-
-    def _generate_from_scratch(self):
-        self.area = Area.from_perlin_noise(**self.config.for_area)
-        self.area_sections = AreaSections.from_area(area=self.area,
-                                                    **self.config.for_area_sections)
+                 config: TerrainGeneratorConfig,
+                 area: Terrain = None,
+                 area_sections: HeightSections = None):
+        self.config = config  # TODO Ed, should I add config?
+        self.area: Terrain = area
+        self.area_sections: HeightSections = area_sections
 
     def reset_objective(self, start: Coord, target: Coord):
         self.area_sections.update_objective(start, target)
 
-    def generate(self,
-                 cache: bool = True):
-        try:
-            if cache:
-                with timer(f'from cache, config={self.config}'):
-                    self.from_cache()
-            else:
-                raise CacheFileNotFoundException("create the cache this time")
-        except Exception as e:
-            if not isinstance(e, CacheFileNotFoundException):
-                raise
-            # not cached, meaning that we load
-            with timer('NO CACHE => generate and cache'):
-                self._generate_from_scratch()
-                self.to_cache()
+    def __str__(self) -> str:
+        return f'''Experiment(config={self.config},
+        area={self.area},
+        area_sections={self.area_sections})'''
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    @classmethod
+    def from_cached(cls, *,
+                    data: ExperimentCache,
+                    config: TerrainGeneratorConfig) \
+            -> 'Experiment':
+        terrain = None
+        if data['terrain']:
+            terrain = Terrain(**init_args(data['terrain']))
+        else:
+            # TODO Ed, remove old ha, hag, hag... data?
+            return Experiment(config=config,
+                              area=None,
+                              area_sections=None)
+        ha = None
+        if data['ha']:
+            ha = HeightSections(**data['ha'])
+        return Experiment(config=config,
+                          area=terrain,
+                          area_sections=ha)  # TODO Ed, add hag ...
+
+    def generate_terrain(self,
+                         terrain_json: TerrainCache = None):
+        if not terrain_json:
+            self.area = Terrain.from_perlin_noise(**self.config.to_json)
+        else:
+            self.update_terrain(terrain_json)
+
+    def update_terrain(self, terraing_json: TerrainCache):
+        self.min_height = terraing_json['min_height']
+        self.max_height = terraing_json['max_height']
+        self.surf = np.array(terraing_json['surf'])
+
+    def generate_hag(self):
+        # TODO Ed, AreaSections shouldn't include the HAG from the beginning
+        self.area_sections = HeightSections.from_area(area=self.area,
+                                                      **self.config.for_area_sections)
 
     # json methods
+
     @property
     def json_terrain(self):
         return self.area.to_json()
@@ -223,7 +255,8 @@ class Experiment:
             import pickle as pkl
             # What to cache:
             cache_dict = deepcopy(self.__dict__)
-            cache_dict['config'] = cache_dict['config'].__dict__  # TODO same to all other variables?
+            # TODO same to all other variables?
+            cache_dict['config'] = cache_dict['config'].__dict__
             with open(fn, 'wb') as handle:
                 pkl.dump(cache_dict, handle)
         except Exception as e:
@@ -253,7 +286,8 @@ class Experiment:
     def test_dijkstra_variants(self, cache: bool = True,
                                noshow: bool = False, save: bool = False):
         if not self.area or not self.area_sections:
-            raise Exception("You didn't call generate before running an experiment")
+            raise Exception(
+                "You didn't call generate before running an experiment")
         # # Use vdist for this experiment
         # vdist = self.area_sections.min_vdist
         # self.area_sections.plot_selected_sections(noshow=True,
@@ -268,14 +302,15 @@ class Experiment:
                     return pkl.load(handle)
             except Exception as e:
                 print(f'cache "{self.cache_fn}.dijkstra" '
-                     f'not found ---> Exception={e}')
+                      f'not found ---> Exception={e}')
 
-        start, target = tuple(self.area.start), tuple(self.area.target)  # TODO Ed, better variant for pts?
+        start, target = tuple(self.area.start), tuple(
+            self.area.target)  # TODO Ed, better variant for pts?
         # self.area_sections.update_objective(start, target)  # updates
         if noshow == False:
             self.area_sections.plot_selected_sections(noshow=True,
                                                       save=(True,
-                                                      f'{self.cache_fn}.fig_hsections.svg'))  # TODO Ed, remove, because it's a separate thing
+                                                            f'{self.cache_fn}.fig_hsections.svg'))  # TODO Ed, remove, because it's a separate thing
 
             matplotlib.use('TkAgg')
             fig, (ax1, ax2, ax3) = plt.subplots(1, 3,
@@ -283,7 +318,8 @@ class Experiment:
             ax1.set(title='Dijkstra using height distance')
             ax2.set(title='Dijkstra using horizontal distance')
             ax3.set(title='Dijkstra using 3d distance')
-            fig.suptitle(f"Road Selection Algorithm\nRoad generated using Config={self.config}")
+            fig.suptitle(
+                f"Road Selection Algorithm\nRoad generated using Config={self.config}")
             # config the figures
             fig.set_figwidth(15)
             fig.set_figheight(10)
@@ -291,17 +327,20 @@ class Experiment:
         # TODO Ed, turn computation of paths into a different functions, to call it without test_d.._variants
 
         with timer('dijkstra_by_height()'):
-            path1 = self.area_sections.mgraph.dijkstra_by_height(start, target)  # ignore horizontal distance
+            path1 = self.area_sections.mgraph.dijkstra_by_height(
+                start, target)  # ignore horizontal distance
             if noshow == False:
                 self.area_sections.plot_path(path1, fig=fig, ax=ax1)
 
         with timer('dijkstra_by_length()'):
-            path2 = self.area_sections.mgraph.dijkstra_by_length(start, target)  # use both of them
+            path2 = self.area_sections.mgraph.dijkstra_by_length(
+                start, target)  # use both of them
             if noshow == False:
                 self.area_sections.plot_path(path2, fig=fig, ax=ax2)
 
         with timer('dijkstra_by_length_3d()'):
-            path3 = self.area_sections.mgraph.dijkstra_by_length_3d(start, target)  # ignore vertical distance
+            path3 = self.area_sections.mgraph.dijkstra_by_length_3d(
+                start, target)  # ignore vertical distance
             if noshow == False:
                 self.area_sections.plot_path(path3, fig=fig, ax=ax3)
 
@@ -335,6 +374,7 @@ class Experiment:
         # can you run multiple processes?
         return result
 
+
 def is_compatible_scaling(grid_size: tuple[int, int], scale_arg: tuple[int, int]) -> bool:
     # TODO Ed, use all() :)
     try:
@@ -363,7 +403,7 @@ if __name__ == '__main__':
                                             height_delta=height_delta,
                                             height_interval=height_interval)
             e = Experiment(config=config)
-            e.generate(cache=True)
+            e.generate_terrain(cache=True)
             e.reset_objective((5, 5), (gs[0] - 5, gs[1] - 5))
             e.test_dijkstra_variants(noshow=True,
                                      save=True)
@@ -371,7 +411,6 @@ if __name__ == '__main__':
             print(f" >> Experiment {cnt} out of {cnt_experiments} ")
             print()
             cnt += 1
-
 
     # grid_based_test(seeds=list(range(5)),
     #                 GRID_SIZE=[(100, 100)],
@@ -392,8 +431,9 @@ if __name__ == '__main__':
                                         scaling_argument=(2, 2),
                                         height_delta=3,
                                         height_interval=(100, 120))
-        e = Experiment(config=config)  # instead of using Experiment, create a class method to also generate data
-        e.generate(cache=False)
+        # instead of using Experiment, create a class method to also generate data
+        e = Experiment(config=config)
+        e.generate_terrain(cache=False)
         # start = (0 + 5,0 + 5)
         # target = (config.GRID_SIZE[0] - 5, config.GRID_SIZE[1] - 5)
         # e.reset_objective(start, target)
@@ -425,11 +465,11 @@ if __name__ == '__main__':
         matplotlib.use('TkAgg')
         fig, ax = create_3d_subplots(1, 1)
 
-        Area._plot_surf_3d(e.area.surf[:20][:, :5],
-                           colormap="Blues",
-                           ax=ax,
-                           fig=fig,
-                           alpha=.5)
+        Terrain._plot_surf_3d(e.area.surf[:20][:, :5],
+                              colormap="Blues",
+                              ax=ax,
+                              fig=fig,
+                              alpha=.5)
         path1 = list(zip(range(20),
                          [0] * 20,
                          e.area.surf[:20, 1]))
@@ -447,7 +487,6 @@ if __name__ == '__main__':
         set_axes_equal(ax)
         plt.show()
 
-
     # TODO Ed,
     #  This makes the window take up the full screen for me, under Ubuntu 12.04 with the TkAgg backend:
     #  .
@@ -464,7 +503,7 @@ if __name__ == '__main__':
                                     height_delta=2)
     # create experiment
     e = Experiment(config=config)
-    e.generate(cache=True)
+    e.generate_terrain(cache=True)
     e.reset_objective((5, 5), (94, 94))
     # run the simple dijkstra test (Graphing the paths for the random objective
     e.test_dijkstra_variants(noshow=False)

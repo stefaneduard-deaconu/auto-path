@@ -15,6 +15,13 @@ configs = generate_configs_grid_based(
     height_intervals=[(100, 200)],
     height_deltas=[2, 3, 4, 5]
 )
+configs = generate_configs_grid_based(
+    seeds=[11],
+    GRID_SIZES=[(60, 60)],
+    scaling_arguments=[(2, 2)],
+    height_intervals=[(100, 200)],
+    height_deltas=[5]
+)
 
 # run a task for each configuration
 async_results = [task_terrain_from_config.delay(cfg.to_json)
