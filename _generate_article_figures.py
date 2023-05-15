@@ -26,7 +26,7 @@ if __name__ == '__main__':
     # TODO Ed, set the square size
     with timer("generate experiment"):
         e = Experiment(config=config)
-        e.generate(cache=True)
+        e.generate_terrain(cache=True)
         start, target = (5, 5), (config.GRID_SIZE[0] - 5, config.GRID_SIZE[1] - 5)
         e.reset_objective(start, target)
         a = e.area
