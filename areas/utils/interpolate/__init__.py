@@ -3,8 +3,8 @@ import itertools
 import numpy as np
 from scipy.interpolate import CubicSpline
 
-from auto_path.areas.graph import Coord
-from auto_path.areas.utils import create_3d_subplots, set_axes_equal
+from areas.graph import Coord
+from areas.utils import create_3d_subplots, set_axes_equal
 
 Coord3D = tuple[float, float, float]
 
@@ -268,7 +268,7 @@ if __name__ == '__main__':
 # if __name__ == '__main__':
 #     import matplotlib
 #     import matplotlib.pyplot as plt
-#     from auto_path.areas.area import Area
+#     from areas.area import Area
 #     from matplotlib.figure import Figure
 #     from mpl_toolkits.mplot3d import Axes3D
 #

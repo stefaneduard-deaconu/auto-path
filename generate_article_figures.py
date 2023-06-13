@@ -4,10 +4,10 @@ from matplotlib.patches import Circle
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
-from auto_path.areas.area import segment_length
-from auto_path.areas.utils import set_axes_equal, create_subplots
-from auto_path.areas.utils.interpolate import remove_bad_points, path_length, interpolate_2d_path_as_is, direction
-from auto_path.main import *
+from areas.area import segment_length
+from areas.utils import set_axes_equal, create_subplots
+from areas.utils.interpolate import remove_bad_points, path_length, interpolate_2d_path_as_is, direction
+from main import *
 
 import math
 
@@ -35,13 +35,13 @@ if __name__ == '__main__':
     plot_all = False
     plot = {"Figure_1": False,
             "Figure_2": False,  # TODO you should flip this, or the surface, but this will take time to find which
-            "Figure_3": False,
+            "Figure_3": True,
             "Figure_4": False,
             "Figure_5": False,
             "Figure_6": False,
             "Figure_7": False,
             "Figure_8": False,
-            "Figure_9": True,
+            "Figure_9": False,
             "Figure_10": True}
 
     # TODO Figure 1. Terrain (3D grid)
@@ -118,6 +118,7 @@ if __name__ == '__main__':
         fig, ax = create_subplots(1, 1)
         e.area_sections.plot_path_2d(path_height, ax=ax, fig=fig)
         ax.axis('equal')  ## TODO Ed, use this insid the show() function
+        ax.invert_yaxis() # TODO Ed, finish this for all plots :)
         e.area_sections.show()
 
     # OLD    4. extract essential points from path
@@ -382,9 +383,22 @@ if __name__ == '__main__':
         # ax.axis('equal')
         # plt.show()
 
-        ax.set_title('The Inclination (%) of the Smoothed Path')
+        # ax.set_title('The Inclination (%) of the Smoothed Path')
         ax.set_xlabel('X - Distance (m)')
         ax.set_ylabel('Y - Altitude (m)')
+        # set y lims
+        ymin = min(h)
+        ymax = max(h)
+        size = ymax - ymin + 1
+        ymin -= 2 * size
+        ymax += 2 * size
+        ax.set_ylim((ymin, ymax))
+        num_yticks = 15
+        ydiff = math.floor(( ymax - ymin + 1) / num_yticks)
+        if ydiff == 0:
+            ydiff = 1
+        yticks = range(math.floor(ymin), math.ceil(ymax) + 1, ydiff)
+        ax.set_yticks(yticks)
 
         dist = [0] + [eucl(a, b) * SCALE
                       for a, b in zip(path3d[0:, :2],
@@ -408,20 +422,25 @@ if __name__ == '__main__':
                 i2 += 1
             # TODO Ed, do anything?
 
-        for pts, color in generate_sections(dist2, h):
-            print(segment_length(pts))
+        sections = list(generate_sections(dist2, h))
+        for pts, color in sections:
+            # print(segment_length(pts))
             ax.plot(*zip(*pts), color, lw=2)
             text_coord = (pts[0] + pts[-1]) / 2
             text_coord[1] = max(h) + 0
             dd, dh = pts[-1] - pts[0]
             inclination = math.ceil(abs(dh / dd * 100))
+            # TODO Ed, compute the maximal tangent value along the subpath
+            text_size = size * .4
             if color == 'green':
-                txt = ax.text(text_coord[0] - 25, text_coord[1] + 80, f'{inclination}%', fontdict={"size": 12})
+                txt = ax.text(text_coord[0] - 5 * text_size, text_coord[1] + 1 * text_size, f'{inclination}%', fontdict={"size": 12})
             elif color == 'red':
-                txt = ax.text(text_coord[0] - 40, text_coord[1] + 10, f'-{inclination}%', fontdict={"size": 12})
-            print()
+                txt = ax.text(text_coord[0] - 8 * text_size, text_coord[1] - 3.5 * text_size, f'-{inclination}%', fontdict={"size": 12})
+            # print()
 
-        ax.axis('equal')
+        return sections
+
+        # ax.axis('equal')
 
 
     def plot_3d_path(path3d: np.array,
@@ -433,23 +452,39 @@ if __name__ == '__main__':
 
 
     # TODO Figures 6. 7. 8.
+    figsize = (12, 8)  # TODO Ed, use figsize global variable for all figures? It doesn't work for multiplots
 
     if plot_all or plot['Figure_7']:
-        fig, ax = create_subplots(1, 1, figsize=(12, 8))
-        ax.set_title('Figure 7 - inclination')
-        plot_inclination(path3d, fig=fig, ax=ax)
-        ax.axis('equal')
+        fig, (ax1, ax2) = create_subplots(2, 1, figsize=(figsize[0], 2*figsize[1]))
+        # on ax 1, plot inclination for the path computed after smoothing algorithm
+        ax1.set_title('Path Inclination - After Smoothing')
+        path3d_with_h = np.array(as_.interpolate_path_height(path3d))
+        sections_smoothed = plot_inclination(path3d_with_h, fig=fig, ax=ax1)
+        # on ax 2, plot inclination for the path computed BEFORE smoothing algorithm
+        ax2.set_title('Path Inclination - Before Smoothing')
+        path3d_with_h = np.array(as_.interpolate_path_height(path_height))
+        plot_inclination(path3d_with_h, fig=fig, ax=ax2)
+
+        # TODO Ed, may be great to also have a dashed/loosely dotted https://matplotlib.org/stable/gallery/lines_bars_and_markers/linestyles.html
+        #  line, for faster comparison
+        # for pts, color in sections_smoothed:
+        #     # print(segment_length(pts))
+        #     # color = ['']
+        #     ax2.plot(*zip(*pts), color, lw=2, linestyle='dashed')
+
         plt.show()
 
+    # TODO Ed, table with the values from each road sections (up elevation, down elevation)
+
     if plot_all or plot['Figure_8']:  # TODO !!!!!!!!!
-        fig, ax = create_3d_subplots(1, 1, figsize=(12, 8))
+        fig, ax = create_3d_subplots(1, 1, figsize=figsize)
         ax.set_title('Figure 8 - 3D Final Path')
         plot_3d_path(path3d, fig=fig, ax=ax)
         ax.axis('equal')
         plt.show()
 
     if plot_all or plot['Figure_9']:  # TODO !!!!!!!!!
-        fig, ax = create_subplots(1, 1, figsize=(12, 8))
+        fig, ax = create_subplots(1, 1, figsize=figsize)
         ax.set_title('Figure 9 - Horizontal curves')
         plot_horizontal_curves(path3d, fig=fig, ax=ax)
         ax.axis('equal')

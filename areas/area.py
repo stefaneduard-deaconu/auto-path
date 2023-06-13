@@ -12,12 +12,12 @@ from perlin_numpy import (
     generate_perlin_noise_2d, generate_fractal_noise_2d
 )
 
-from auto_path.areas.graph import WeightedGraph
-from auto_path.areas.utils import set_axes_equal
+from areas.graph import WeightedGraph
+from areas.utils import set_axes_equal
 
 import itertools
 
-from auto_path.areas.utils.interpolate import Coord3D
+from areas.utils.interpolate import Coord3D
 
 
 # TODO move to pybezier library
