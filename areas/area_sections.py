@@ -597,7 +597,8 @@ class AreaSections:
                           fig: Figure = None):
         plt.interactive(False)
         # get data:
-        x, y, h = zip(*self.interpolate_path_height(path))
+        path3d = self.interpolate_path_height(path)
+        x, y, h = zip(*path3d)
         # create figure and 3d axes
         if not fig or not ax:
             fig, ax = create_3d_subplots(1, 1)
@@ -638,6 +639,7 @@ class AreaSections:
                                 target3d=target3d)
         # # reset backend to pycharm
         # matplotlib.use('module://backend_interagg')
+        return path3d
 
     def plot_path_2d(self,
                      path: list[CoordReal],

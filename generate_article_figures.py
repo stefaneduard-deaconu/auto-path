@@ -1,3 +1,4 @@
+import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.patches import Circle
@@ -40,9 +41,9 @@ if __name__ == '__main__':
             "Figure_5": False,
             "Figure_6": False,
             "Figure_7": False,
-            "Figure_8": False,
+            "Figure_8": True,
             "Figure_9": False,
-            "Figure_10": True}
+            "Figure_10": False}
 
     # TODO Figure 1. Terrain (3D grid)
     if plot_all or plot['Figure_1']:
@@ -446,7 +447,7 @@ if __name__ == '__main__':
     def plot_3d_path(path3d: np.array,
                      fig: Figure,
                      ax: Axes3D):
-        e.area_sections.plot_path_3d_real(path3d,
+        return e.area_sections.plot_path_3d_real(path3d,
                                           fig=fig,
                                           ax=ax)
 
@@ -479,7 +480,7 @@ if __name__ == '__main__':
     if plot_all or plot['Figure_8']:  # TODO !!!!!!!!!
         fig, ax = create_3d_subplots(1, 1, figsize=figsize)
         ax.set_title('Figure 8 - 3D Final Path')
-        plot_3d_path(path3d, fig=fig, ax=ax)
+        path3d_real = plot_3d_path(path3d, fig=fig, ax=ax)
         ax.axis('equal')
         plt.show()
 
@@ -489,3 +490,35 @@ if __name__ == '__main__':
         plot_horizontal_curves(path3d, fig=fig, ax=ax)
         ax.axis('equal')
         plt.show()
+
+    path = np.array(path3d_real) * (10, 10, 1)
+    surf = e.area_sections.orig_area.surf
+    n, m = surf.shape
+    from itertools import product
+    iterators = product(range(n), range(m))  # n x m,  or  m x n
+    surf_pts = np.array([(ln, cl, surf[ln,cl]) for ln, cl in iterators]) * (10, 10, 1)
+    print(path3d_real)
+    print(surf_pts)
+    np.save('path.npy', path)
+    np.save('terrain.npy', surf_pts)
+    #
+    # np.savetxt("path.csv", path, delimiter=",")
+    # np.savetxt("terrain.csv", surf_pts, delimiter=",")
+
+    def save_np_to_csv(arr: np.array, path: str):
+        import csv
+
+        # open the file in the write mode
+        with open(path, 'w') as f:
+            # create the csv writer
+            writer = csv.writer(f, lineterminator='\n')
+
+            for row in arr:
+                # write a row to the csv file
+                writer.writerow(row)
+
+
+    save_np_to_csv(path, "path2.csv")
+    save_np_to_csv(surf_pts, "terrain2.csv")
+
+    # breakpoint()
