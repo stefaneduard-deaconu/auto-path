@@ -133,12 +133,25 @@ class Area:
         plt.show()
 
     def interpolate_height(self, coord: np.array):
+        if coord[0] < 0:
+            coord[0] = 0
+        if coord[0] >= len(self.surf):
+            coord[0] = len(self.surf) - 1
+        if coord[1] < 0:
+            coord[1] = 0
+        if coord[1] >= len(self.surf):
+            coord[1] = len(self.surf) - 1
         # interpolate using the 4 closest points
         # TODO Ed, may later use a more mathematic interpolation algo
         # TODO Ed, also upgrade how it's computed
         pt = np.array([math.floor(coord[0]),
                        math.floor(coord[1])])
-        closest_pts = [(0, 0), (0, 1), (1, 0), (1, 1)] + pt
+        closest_pts = [
+            (i, j)
+            for i,j in [(0, 0), (0, 1), (1, 0), (1, 1)] + pt
+            if 0 <= i < len(self.surf) and 0 <= j < len(self.surf[0])
+        ]
+        
         # x,y = zip(*closest_pts, pt)
         # z = [self.surf[i,j]
         #      for i,j in zip(x,y)]
@@ -232,7 +245,8 @@ class Area:
         px, py = pt
         pz = self.surf[px, py]
         ax.scatter([px], [py], [pz])
-        plt.show()
+        # plt.show()  # TODO Stefan: temporarily
+        plt.savefig('Figure_vicinity.svg')
 
     def plot_terrain_3d(self,
                         ax: Axes3D = None,
@@ -247,7 +261,9 @@ class Area:
                                            axis=axis,
                                            use_tk=use_tk)
         if not noshow:
-            self.show()
+            # self.show()
+            plt.savefig('Figure_plot_terrain_3d.svg')
+            pass
         return ax, fig, surf
 
     # TODO Ed, task 2, implement interpolation using B-Spline libraries
@@ -301,5 +317,6 @@ def interpolate_using_bezier_curve(area: Area,
     curve = compute_bezier_curve(waypoints)
 
     plt.plot(*zip(*curve[:, :2]), 'limegreen')
-    plt.show()
+    plt.savefig('Figure_interpolate_using_bezier_curve.svg')
+    # plt.show()
     return curve

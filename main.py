@@ -84,7 +84,8 @@ def slow_method_using_full_graph():
     a = Area.from_perlin_noise(seed=10, GRID_SIZE=(500, 500), min_height=200, max_height=300)
     a.generate_objective(seed=123)
     a.plot_terrain()
-    a.show()
+    # a.show()
+    plt.savefig('Figure_slow_method_using_full_graph.svg')
 
     @timeit
     def compute_area_sections(a: Area,
@@ -95,7 +96,8 @@ def slow_method_using_full_graph():
         a_sections.plot_grouped(max_hdiff=70)
         # plot heat map
         a_sections.plot_heatmap()
-        a_sections.show()
+        # a_sections.show()
+        plt.savefig('Figure_compute_area_sections.svg')
 
     for hd in [10, 15, 20, 25]:
         compute_area_sections(a,
@@ -295,7 +297,9 @@ class Experiment:
 
             # mng = ax1.get_current_fig_manager()
             # mng.resize(*mng.window.maxsize())
-            plt.show()
+
+            # plt.show()
+            plt.savefig('Figure_test_dijkstra_variants.svg')
         if save:
             fig_name = f'{self.cache_fn}.fig_dijkstra.svg'
             fig.savefig(fig_name)
@@ -427,7 +431,8 @@ if __name__ == '__main__':
         ax.plot(*zip(*path2))
         ax.plot(*zip(*path3))
         set_axes_equal(ax)
-        plt.show()
+        # plt.show()
+        plt.savefig('Figure_interpolation_test.svg')
 
 
     # TODO Ed,

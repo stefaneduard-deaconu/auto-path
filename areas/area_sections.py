@@ -436,9 +436,9 @@ class AreaSections:
         if not fig and not ax:
             pass  # TODO Ed, create them
         if start3d is None:
-            start3d = self.start  # TODO 3D
+            start3d = np.array([*self.start])  # TODO 3D
         if target3d is None:
-            target3d = self.target  # TODO 3D
+            target3d = np.array(self.target)  # TODO 3D
         # add height to start,target
         start3d[0], start3d[1] = start3d[1], start3d[0]  # TODO Ed, 2D
         target3d[0], target3d[1] = target3d[1], target3d[0]  # TODO Ed, 2D
@@ -503,7 +503,8 @@ class AreaSections:
                         marker=',', lw=0, s=1)  # scatter only one pixel
         # plt.axis('equal')
         plt.scatter(*zip(*[self.start, self.target]), c=['red'])
-        plt.show()
+        # plt.show()
+        plt.savefig('Figure_plot_areas.svg')
 
     @property
     def min_vdist(self) -> int:
@@ -526,17 +527,18 @@ class AreaSections:
         self.plot_heatmap(fig=fig, ax=ax,
                           plot_objective=plot_objective)
 
-        for idx in self.shortest_path_areas_ids():
-            area = self.area(idx)
-            # TODO Ed, color based on difference to start (start is at middle, and you go up and down
-            ax.scatter(*zip(*area), facecolor='none', c=['gold'],
-                       marker='x', lw=1, s=3)  # scatter only one pixel
-            # TODO for better images, print using polygons, you just need the contours for each area.
+        # for idx in self.shortest_path_areas_ids():
+        #     area = self.area(idx)
+        #     # TODO Ed, color based on difference to start (start is at middle, and you go up and down
+        #     ax.scatter(*zip(*area), facecolor='none', c=['gold'],
+        #                marker='x', lw=1, s=3)  # scatter only one pixel
+        #     # TODO for better images, print using polygons, you just need the contours for each area.
         # scatter the objective points and their name
         if plot_objective:
             self._plot_objective(fig=fig, ax=ax)
         if not noshow:
-            plt.show()
+            # plt.show()
+            plt.savefig('Figure_plot_selected_sections.svg')
         if save[0]:
             plt.savefig(save[1])
 
@@ -663,19 +665,21 @@ class AreaSections:
         miny -= border
         maxx += border
         maxy += border
+        # TODO Stefan, deactivate this yellow part
         self.plot_selected_sections(noshow=True,
                                     ax=ax, fig=fig,
                                     plot_objective=False)
-        # plot path  # TODO Ed, also transform Coord to start with 0,0. Also include some margin
-        # TODO Ed, this could be a functiona
-        ax.plot(x, y, c='red', lw=2)  # TODO Ed, why?
-        # add start and target points
-        start = np.array(self.start)  # + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
-        target = np.array(self.target)  # + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
-        self._plot_objective_2d(fig=fig,
-                                ax=ax,
-                                start=start,
-                                target=target)
+
+        # # plot path  # TODO Ed, also transform Coord to start with 0,0. Also include some margin
+        # # TODO Ed, this could be a functiona
+        # ax.plot(x, y, c='red', lw=2)  # TODO Ed, why?
+        # # add start and target points
+        # start = np.array(self.start)  # + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
+        # target = np.array(self.target)  # + (- minx + border // 2, - miny + border // 2)  # TODO Ed, why?
+        # self._plot_objective_2d(fig=fig,
+        #                         ax=ax,
+        #                         start=start,
+        #                         target=target)
 
     def plot_grouped(self, max_hdiff: float):  # TODO Ed, older function
         if self.start is None:
@@ -742,4 +746,5 @@ class AreaSections:
             # TODO for better images, print using polygons, you just need the contours for each area.
         # plt.axis('equal')
         plt.scatter(*zip(*[self.start, self.target]), c=['red'])
-        plt.show()
+        # plt.show()
+        plt.savefig('Figure_plot_grouped.svg')
