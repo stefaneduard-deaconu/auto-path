@@ -1,7 +1,6 @@
 import itertools
 import math
 from collections import defaultdict
-from types import NoneType
 
 from typing import Union, Optional, Iterable, Hashable, Callable
 
@@ -17,7 +16,7 @@ CoordReal = tuple[float, float]
 Coord3D = tuple[int, int, int]
 Coord3dReal = tuple[float, float, float]
 HSectionIndexPair = tuple[int, int]
-AreaIndex = Union[int, NoneType]
+AreaIndex = Union[int]
 CoordToAreaIndex = dict[Coord, AreaIndex]
 
 SharedContour = dict[HSectionIndexPair, set[Coord]]

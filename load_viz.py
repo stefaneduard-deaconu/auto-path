@@ -13,6 +13,7 @@ if __name__ == '__main__':
         with open(fn, 'rb') as handle:
             data = pkl.load(handle)
             fig, axes = data['fig'], data['axes']
-            plt.show()
+            # plt.show()
+            plt.savefig('Figure_load_vizpy.svg')
     while True:
         pass

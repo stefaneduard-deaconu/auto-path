@@ -2,6 +2,7 @@ venv/
 *.json
 *.pkl
 
+experiments/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

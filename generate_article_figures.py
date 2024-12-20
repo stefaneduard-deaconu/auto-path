@@ -10,6 +10,8 @@ from areas.utils import set_axes_equal, create_subplots
 from areas.utils.interpolate import remove_bad_points, path_length, interpolate_2d_path_as_is, direction
 from main import *
 
+import csv
+
 import math
 
 import matplotlib
@@ -18,11 +20,33 @@ matplotlib.use('TkAgg')
 
 SCALE = 10
 
+def save_np_to_csv(arr: np.array, path: str):
+    # open the file in the write mode
+    with open(path, 'w') as f:
+        # create the csv writer
+        writer = csv.writer(f, lineterminator='\n')
+
+        for row in arr:
+            # write a row to the csv file
+            writer.writerow(row)
+            
+def smooth_path(path: np.array) -> np.array:
+    path_rough1, bad_points = remove_bad_points(path, minimal_radius=25)
+    path_smooth1 = interpolate_2d_path_as_is(path_rough1, multiplier=4)
+
+    path_rough2, _ = remove_bad_points(path_smooth1, minimal_radius=25)
+    path_smooth2 = interpolate_2d_path_as_is(path_rough2, multiplier=4)
+    
+    return path_smooth2
+
 if __name__ == '__main__':
     # 1. Choose an area and plot it
-    config = TerrainGeneratorConfig(seed=0, GRID_SIZE=(100, 100),
-                                    scaling_argument=(4, 4), height_interval=(100, 120),
-                                    height_delta=3)
+    config = TerrainGeneratorConfig(
+        seed=0, GRID_SIZE=(100, 100),
+        scaling_argument=(4, 4),
+        height_interval=(100, 120),
+        height_delta=3
+    )
     # TODO Ed, set the square size
     with timer("generate experiment"):
         e = Experiment(config=config)
@@ -34,16 +58,16 @@ if __name__ == '__main__':
 
     # TODO set to True to plot all figures
     plot_all = False
-    plot = {"Figure_1": False,
+    plot = {"Figure_1": True,
             "Figure_2": False,  # TODO you should flip this, or the surface, but this will take time to find which
             "Figure_3": True,
-            "Figure_4": False,
-            "Figure_5": False,
-            "Figure_6": False,
-            "Figure_7": False,
+            "Figure_4": True,
+            "Figure_5": True,
+            "Figure_6": True,
+            "Figure_7": True,
             "Figure_8": True,
-            "Figure_9": False,
-            "Figure_10": False}
+            "Figure_9": True,
+            "Figure_10": True}
 
     # TODO Figure 1. Terrain (3D grid)
     if plot_all or plot['Figure_1']:
@@ -52,7 +76,8 @@ if __name__ == '__main__':
         a.plot_terrain_3d(fig=fig, ax=ax, noshow=True)
         set_axes_equal(ax)
         fig.tight_layout()
-        plt.show()
+        # plt.show()
+        plt.savefig('Figure_2.svg')
 
     # OLD Figure 2. Plot the area using triangulation
     # # TODO Ed, not working
@@ -91,7 +116,7 @@ if __name__ == '__main__':
     # set_axes_equal(ax1)
     # set_axes_equal(ax2)
     # fig.tight_layout()
-    # plt.show()
+    # # plt.show()
 
     # # TODO Ed, this is too difficult and maybe useless
     # #  3. Plot a path (will use Dijkstra later)
@@ -102,7 +127,8 @@ if __name__ == '__main__':
         fig, ax = create_subplots(1, 1, figsize=(10, 10))
         e.area_sections.plot_selected_sections(noshow=True,
                                                ax=ax, fig=fig)
-        plt.show()
+        # plt.show()
+        plt.savefig('Figure_2.svg')
 
     # TODO Figure 3 - plotting the Dijkstra path
     paths = e.test_dijkstra_variants(cache=True, noshow=True)
@@ -120,7 +146,8 @@ if __name__ == '__main__':
         e.area_sections.plot_path_2d(path_height, ax=ax, fig=fig)
         ax.axis('equal')  ## TODO Ed, use this insid the show() function
         ax.invert_yaxis() # TODO Ed, finish this for all plots :)
-        e.area_sections.show()
+        # e.area_sections.show()
+        plt.savefig('Figure_3_no_path.svg')
 
     # OLD    4. extract essential points from path
     #        5. Smooth (interpolate) with cubic spline
@@ -130,19 +157,26 @@ if __name__ == '__main__':
     # ax2.set_title("3D Grid Path after only important points are kept")
     # ax1.plot(*zip(*path), 'red', marker='o', markersize=3)
     # ax2.plot(*zip(*path_rough), 'red', marker='o', markersize=3)
-    # plt.show()
+    # # plt.show()
 
     # TODO Figure 4-5  smoothing and interpolation
     path_rough1, bad_points = remove_bad_points(path_height, minimal_radius=25)
-    path_smooth1 = interpolate_2d_path_as_is(path_rough1, multiplier=2)
+    path_smooth1 = interpolate_2d_path_as_is(path_rough1, multiplier=4)
 
     path_rough2, _ = remove_bad_points(path_smooth1, minimal_radius=25)
     path_smooth2 = interpolate_2d_path_as_is(path_rough2, multiplier=4)
     if plot_all or plot['Figure_6']:
         # Steps 0-2, 3
+        # plt.figure(figsize=(16, 16))
         fig, (ax1, ax2) = create_subplots(1, 2)
+        fig.set_figwidth(12)
+        fig.set_figheight(10)
         # ax1: initial points, without colinear ones (scattered as red crosses
-        ax1.scatter(*zip(*path_height), c='green', marker='o', lw=5, s=20)
+        # TODO Stefan, only plot the significant points
+        significant_points = set(path_height)
+        significant_points.difference_update(set(bad_points['colinear']))
+        significant_points.difference_update(set(bad_points['almost_colinear']))
+        ax1.scatter(*zip(*significant_points), c='green', marker='o', lw=5, s=20)
         ax1.scatter(*zip(*bad_points['colinear']), c='red', marker='x', lw=1, s=20)
         ax1.scatter(*zip(*bad_points['almost_colinear']), c='orange', marker='+', lw=1, s=55)
         ax1.axis('equal')
@@ -156,6 +190,7 @@ if __name__ == '__main__':
         ax2.grid()
 
         #     ax.grid()
+        plt.savefig('Figure_6.svg')
 
         # # Algorithm applied for 2 iterations
         # fig, (ax1, ax2) = create_subplots(1, 2)
@@ -171,7 +206,7 @@ if __name__ == '__main__':
         # ax2.set_xlabel('Iteration 2')
         # ax2.grid()
 
-        plt.show()
+        # plt.show()
 
 
     # TODO Ed, add these?
@@ -275,7 +310,7 @@ if __name__ == '__main__':
     # sc = ax2.plot(*zip(*path3d_smoother), 'green')
     # set_axes_equal(ax1)
     # set_axes_equal(ax2)
-    # plt.show()
+    # # plt.show()
 
     # TODO Ed, use for final Figures
     path3d = path_smooth2  # TODO Ed, what to do with this?
@@ -370,7 +405,8 @@ if __name__ == '__main__':
         # TODO Ed, was the first variant correct?
 
         ax.axis('equal')
-        plt.show()
+        # plt.show()
+        plt.savefig('Figure_77.svg')
 
 
     def plot_inclination(path3d: np.array,
@@ -382,7 +418,7 @@ if __name__ == '__main__':
 
         # ax.plot(x, h)
         # ax.axis('equal')
-        # plt.show()
+        # # plt.show()
 
         # ax.set_title('The Inclination (%) of the Smoothed Path')
         ax.set_xlabel('X - Distance (m)')
@@ -450,8 +486,6 @@ if __name__ == '__main__':
         return e.area_sections.plot_path_3d_real(path3d,
                                           fig=fig,
                                           ax=ax)
-
-
     # TODO Figures 6. 7. 8.
     figsize = (12, 8)  # TODO Ed, use figsize global variable for all figures? It doesn't work for multiplots
 
@@ -473,7 +507,8 @@ if __name__ == '__main__':
         #     # color = ['']
         #     ax2.plot(*zip(*pts), color, lw=2, linestyle='dashed')
 
-        plt.show()
+        # plt.show()
+        plt.savefig('Figure_7.svg')
 
     # TODO Ed, table with the values from each road sections (up elevation, down elevation)
 
@@ -482,14 +517,16 @@ if __name__ == '__main__':
         ax.set_title('Figure 8 - 3D Final Path')
         path3d_real = plot_3d_path(path3d, fig=fig, ax=ax)
         ax.axis('equal')
-        plt.show()
+        # plt.show()
+        plt.savefig('Figure_8.svg')
 
     if plot_all or plot['Figure_9']:  # TODO !!!!!!!!!
         fig, ax = create_subplots(1, 1, figsize=figsize)
         ax.set_title('Figure 9 - Horizontal curves')
         plot_horizontal_curves(path3d, fig=fig, ax=ax)
         ax.axis('equal')
-        plt.show()
+        # plt.show()
+        plt.savefig('Figure_9.svg')
 
     path = np.array(path3d_real) * (10, 10, 1)
     surf = e.area_sections.orig_area.surf
@@ -505,20 +542,7 @@ if __name__ == '__main__':
     # np.savetxt("path.csv", path, delimiter=",")
     # np.savetxt("terrain.csv", surf_pts, delimiter=",")
 
-    def save_np_to_csv(arr: np.array, path: str):
-        import csv
-
-        # open the file in the write mode
-        with open(path, 'w') as f:
-            # create the csv writer
-            writer = csv.writer(f, lineterminator='\n')
-
-            for row in arr:
-                # write a row to the csv file
-                writer.writerow(row)
-
-
-    save_np_to_csv(path, "path2.csv")
-    save_np_to_csv(surf_pts, "terrain2.csv")
+    save_np_to_csv(path, "path.csv")
+    save_np_to_csv(surf_pts, "terrain.csv")
 
     # breakpoint()
