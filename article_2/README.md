@@ -1,5 +1,9 @@
 # Optimizing Road Paths in Uneven Terrain with Knowledge-Based Curve Fitting
 
+## Access the Docs:
+
+[Github for Article 2](https://github.com/stefaneduard-deaconu/auto-path/tree/article-2-path-smoothing/article_2)
+
 ## TODO for enhancing the article
 
 To make the **Results section** of your article more impactful and valuable to the domain of civil engineering and automated road design, consider these strategies:
