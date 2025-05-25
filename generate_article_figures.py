@@ -7,7 +7,7 @@ from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 
 from areas.area import segment_length
 from areas.utils import set_axes_equal, create_subplots
-from areas.utils.interpolate import remove_bad_points, path_length, interpolate_2d_path_as_is, direction
+from areas.utils.interpolate import remove_bad_points, path_length, interpolate_2d_path_as_is, direction, radius
 from main import *
 
 import csv
@@ -30,13 +30,13 @@ def save_np_to_csv(arr: np.array, path: str):
             # write a row to the csv file
             writer.writerow(row)
             
-def smooth_path(path: np.array) -> np.array:
-    path_rough1, bad_points = remove_bad_points(path, minimal_radius=25)
+def smooth_path(path: np.array, minimal_radius=25) -> np.array:
+    path_rough1, bad_points = remove_bad_points(path, minimal_radius=minimal_radius)
     path_smooth1 = interpolate_2d_path_as_is(path_rough1, multiplier=4)
 
-    path_rough2, _ = remove_bad_points(path_smooth1, minimal_radius=25)
+    path_rough2, _ = remove_bad_points(path_smooth1, minimal_radius=minimal_radius)
     path_smooth2 = interpolate_2d_path_as_is(path_rough2, multiplier=4)
-    
+
     return path_smooth2
 
 if __name__ == '__main__':
@@ -171,14 +171,14 @@ if __name__ == '__main__':
         fig, (ax1, ax2) = create_subplots(1, 2)
         fig.set_figwidth(12)
         fig.set_figheight(10)
-        # ax1: initial points, without colinear ones (scattered as red crosses
+        # ax1: initial points, without collinear ones (scattered as red crosses
         # TODO Stefan, only plot the significant points
         significant_points = set(path_height)
-        significant_points.difference_update(set(bad_points['colinear']))
-        significant_points.difference_update(set(bad_points['almost_colinear']))
+        significant_points.difference_update(set(bad_points['collinear']))
+        significant_points.difference_update(set(bad_points['almost_collinear']))
         ax1.scatter(*zip(*significant_points), c='green', marker='o', lw=5, s=20)
-        ax1.scatter(*zip(*bad_points['colinear']), c='red', marker='x', lw=1, s=20)
-        ax1.scatter(*zip(*bad_points['almost_colinear']), c='orange', marker='+', lw=1, s=55)
+        ax1.scatter(*zip(*bad_points['collinear']), c='red', marker='x', lw=1, s=20)
+        ax1.scatter(*zip(*bad_points['almost_collinear']), c='orange', marker='+', lw=1, s=55)
         ax1.axis('equal')
         ax1.set_xlabel('(a) - Steps 0-2')
         ax1.grid()
@@ -194,7 +194,7 @@ if __name__ == '__main__':
 
         # # Algorithm applied for 2 iterations
         # fig, (ax1, ax2) = create_subplots(1, 2)
-        # # ax1: initial points, without colinear ones (scattered as red crosses
+        # # ax1: initial points, without collinear ones (scattered as red crosses
         # ax1.plot(*zip(*path_smooth1), c='green', marker='o')
         # ax2.plot(*zip(*path_smooth2), c='green', marker='o')
         #
@@ -211,23 +211,6 @@ if __name__ == '__main__':
 
     # TODO Ed, add these?
     # # 5.extra Rectify the radii which are too tight
-    def radius(p1: np.array,
-               p2: np.array,
-               p3: np.array) -> float:
-        p1 = np.array(p1)
-        p2 = np.array(p2)
-        p3 = np.array(p3)
-        # Compute the distances between the points
-        a = np.linalg.norm(p1 - p2)
-        b = np.linalg.norm(p2 - p3)
-        c = np.linalg.norm(p3 - p1)
-        # Compute the semi-perimeter of the triangle
-        s = (a + b + c) / 2
-        # Compute the area of the triangle using Heron's formula
-        A = np.sqrt(s * (s - a) * (s - b) * (s - c))
-        # Compute the circumradius of the triangle
-        R = (a * b * c) / (4 * A)
-        return R
 
 
     #

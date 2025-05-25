@@ -1,0 +1,763 @@
+import matplotlib.pyplot as plt
+from scipy.interpolate import CubicSpline, CubicHermiteSpline
+
+from areas.utils.interpolate import Coord3D, is_collinear, distance_to_line
+from article_2.visualiser import Visualiser
+from main import *
+
+import matplotlib
+from data.configs import article_config
+
+matplotlib.use('TkAgg')
+
+
+# TODO Stefan, temporarily rework this function, then move it back to .interpolate
+def remove_bad_points(path3d: list[Coord3D], minimal_radius=15, GRID_RATIO_TO_METERS=10):
+    bad_points = {
+        'collinear': [],
+        'almost_collinear': [],
+        'too_small_radius': []
+    }
+
+    # Step 1. remove collinear points
+
+    path = [path3d[0],
+            *[p2
+              for p1, p2, p3 in zip(path3d[0:],
+                                    path3d[1:],
+                                    path3d[2:])
+              if not is_collinear(p1, p2, p3)],
+            path3d[-1]]
+    bad_points['collinear'] = [p2
+                               for p1, p2, p3 in zip(path3d[0:],
+                                                     path3d[1:],
+                                                     path3d[2:])
+                               if is_collinear(p1, p2, p3)]
+
+    # Step 2. remove point who are outside the minimum radius
+    #         of two consecutive lines
+
+    min_radius = minimal_radius / GRID_RATIO_TO_METERS  # 15m, but each element on the grid has 5 meters
+    min_diameter = 2 * min_radius
+
+    # 1) check if radius is big enough
+    short_lines = {i
+                   for i in range(len(path) - 1)
+                   if eucl(path[i], path[i + 1]) < min_diameter}
+    long_lines = {i
+                  for i in range(len(path) - 1)
+                  if eucl(path[i], path[i + 1]) >= min_diameter}
+    # look for consecutive short lines, and try to merge them
+    # they are "mergeable" if the straight line from start to bottom, and all the short lines together,
+    #  have a negligable area, as compared with the number of square to traverse.
+    new_path = list(path)
+
+    # cases: 1. long - short - long, we ignore
+    #           if same directions => raise error
+    def is_almost_line(start: int,
+                       end: int,
+                       new_path: np.array):
+        for i in range(start, min(end + 1,
+                                  len(new_path))):
+            p = new_path[i]
+            try:
+                d = distance_to_line(p, (new_path[start], new_path[end + 1]))
+            except:
+                d = distance_to_line(p, (
+                    new_path[start],
+                    new_path[len(new_path) - 1]))  # TODO Ed, error: may exceed if at the end of the path
+            if d > min_radius:
+                return False  # return False if at least a point is too far from the line
+        return True
+
+    def extract_longest_line(i: int, new_path: np.array):
+        start = i
+        end = i + 1
+
+        while end < len(new_path) and is_almost_line(start, end, new_path) \
+                and end not in long_lines:  # TODO Ed, second cond is not needed,
+            # TODO Ed, but we need to keep some of the removed pts
+            end += 1
+        return start, end + 1
+
+    ignore_until = 0
+    for i in short_lines:
+        if i < ignore_until:
+            continue
+        if new_path[i] is None:
+            continue
+
+        if i - 1 < 0:
+            # special cases:
+            if i + 1 in long_lines:
+                new_path[i + 1] = None
+            else:
+                # extract longest possible line
+                start, end = extract_longest_line(i,
+                                                  new_path)  # TODO Ed, we remove everything up until the first long line, is itok?
+                # TODO Ed, mostly yes (from prev line), but depends on the min_radius setting
+                # line is from path[start] to path[end+1], so we remote path[start+1:end+1]
+                bad_points['almost_collinear'].extend(new_path[start + 1:end])
+                new_path[start + 1:end] = [None] * (end - (start + 1))
+                # ignore the point in the big fore
+                ignore_until = end
+        else:
+            # we have both previous and next line
+
+            # if previous is short, you failer
+            if new_path[i - 1] is not None and i - 1 in short_lines:
+                raise Exception('BAD1')
+            # if both are long, we'll ignore the second point from this line
+            if i + 1 in long_lines:
+                # TODO Ed, instead of this, we should replace with another point on this short line?
+                bad_points['almost_collinear'].append(new_path[i + 1])
+                new_path[i + 1] = None
+            else:
+                # long before, short after, is the same as line 147 (first else from the for)
+                # extract longest possible line
+                start, end = extract_longest_line(i,
+                                                  new_path)  # TODO may sometime unite a few short lines, with a long line
+                # line is from path[start] to path[end+1], so we remote path[start+1:end+1]
+                bad_points['almost_collinear'].extend(new_path[start + 1:end])
+                new_path[start + 1:end] = [None] * (end - (start + 1))
+                # ignore the point in the big fore
+                ignore_until = end
+    # never remove last point TODO Ed
+    if new_path[-1] is None:
+        new_path[-1] = path3d[-1]  # TODO Ed, extremely dirty
+    # TODO Ed, depending on angle, there's a minimal length for the lines
+    return np.array([x
+                     for x in new_path
+                     if x is not None]), \
+        bad_points
+
+
+def interpolate_2d_path(path2d: list[Coord],
+                        multiplier: int = 4):
+    # Apply cubic spline interpolation to the real coordinates
+    # pts_to_interpolate = remove_bad_points(path2d)
+    pts_to_interpolate = path2d
+
+    t = np.arange(len(pts_to_interpolate))
+    cs = CubicSpline(t, pts_to_interpolate, bc_type='natural')
+    smooth_path = cs(np.linspace(0, len(pts_to_interpolate) - 1, multiplier * len(pts_to_interpolate)))
+    return smooth_path
+
+import numpy as np
+from scipy.interpolate import splprep, splev
+from typing import List, Tuple
+
+Coord = Tuple[float, float]
+
+def interpolate_2d_path_v2(path2d: list[Coord], multiplier: int = 10) -> list[Coord]:
+    """
+    Interpolate a 2D path using B-spline interpolation for smooth roads.
+    :param path2d: List of (x, y) coordinates
+    :param multiplier: Number of points to generate per input point
+    :return: Smooth interpolated list of (x, y) coordinates
+    """
+    if len(path2d) < 2:
+        return path2d  # Not enough points to interpolate
+
+    dimensions = zip(*path2d)
+    tck, u = splprep([*dimensions], s=10)  # s=0 for interpolation (exact fit)
+
+    u_new = np.linspace(0, 1, len(path2d) * multiplier)
+    new_dimensions = splev(u_new, tck)
+
+    smooth_path = np.array(list(zip(*new_dimensions)))
+    return smooth_path
+
+
+if __name__ == '__main__':
+    # 1. Choose an area and plot it
+    config = article_config
+    # TODO Ed, set the square size
+    with timer("generate experiment"):
+        e = Experiment(config=config)
+        e.generate(cache=True)
+        e.reset_objective(
+            (5, 5),
+            (config.GRID_SIZE[0] - 5, config.GRID_SIZE[1] - 5)
+        )
+        rough_path = np.array(
+            e.test_dijkstra_variants(cache=True, noshow=True, only_compute_based_on='height')['height']
+        )
+    print(rough_path)
+    (
+        representative_path,
+        removed_from_rough_path
+    ) = remove_bad_points(rough_path, minimal_radius=15)
+    from pprint import pprint
+
+    print(' >> representative points')
+    pprint(representative_path)
+
+    print(' >> non-representative points')
+    pprint(removed_from_rough_path)
+
+    # scatter rough path
+    # plt.plot(rough_path[:, 0], rough_path[:, 1], color='black', label='rough')
+
+    # scatter non-representative points
+    set_from_ndarray = lambda arr: set((x, y) for x, y in arr)
+    non_representative_points = set_from_ndarray(removed_from_rough_path['almost_collinear']) | \
+                                set_from_ndarray(removed_from_rough_path['too_small_radius']) | \
+                                set_from_ndarray(removed_from_rough_path['collinear'])
+
+    non_representative_path = np.array([
+        pt for pt in rough_path
+        if tuple(pt) in non_representative_points
+    ])
+    # print(list(representative_path))
+    # print(list(non_representative_path))
+    # plt.scatter(non_representative_path[:, 0],
+    #             non_representative_path[:, 1],
+    #             s=[.05 * len(non_representative_path)],
+    #             color='red',
+    #             label='non-representative')
+
+    # scatter representative points
+
+    # TODO STEFAN, DO THIS FOR COLINEAR PATHS :)
+    new_rep_path = [representative_path[0]]
+    MIN_RADIUS = 15
+    for pt1, pt2 in zip(representative_path[1:], representative_path[2:]):
+        new_rep_path.append(pt1)
+        # optionally append a middle point
+        distance = np.linalg.norm(pt2 - pt1)
+        if distance * 10 > MIN_RADIUS:
+            mid_pt = (pt1 + pt2) / 2
+            new_rep_path.append(mid_pt)
+            print(pt1, pt2, mid_pt)
+    new_rep_path.append(representative_path[-1])
+    new_rep_path = np.array(new_rep_path)
+    # TODO Stefan, I updated this
+    # plt.scatter(new_rep_path[:, 0],
+    #             new_rep_path[:, 1],
+    #             s=[2 * len(new_rep_path)],
+    #             color='green',
+    #             label='representative')
+
+    # scatter interpolated path
+    # interpolated_path = interpolate_2d_path_v2(representative_path, multiplier=8)
+
+    interpolated_path = interpolate_2d_path_v2(new_rep_path, multiplier=8)
+    # plt.plot(interpolated_path[:, 0],
+    #          interpolated_path[:, 1],
+    #          linewidth=1.5,
+    #          color='blue',
+    #          label='interpolated')
+    #
+    # plt.show()
+
+    # rough vs smooth:
+    if False:
+        plt.plot(rough_path[:, 0], rough_path[:, 1], color='gray', label='rough', linestyle='--')
+        plt.plot(interpolated_path[:, 0],
+                 interpolated_path[:, 1],
+                 linewidth=2,
+                 color='blue',
+                 label='interpolated')
+        plt.grid()
+        plt.show()
+
+    viz = Visualiser(e)
+    # viz.visualise_radii(interpolated_path)
+    viz.visualise_elevation_profile(interpolated_path)
+
+#     # TODO set to True to plot all figures
+#     plot_all = False
+#     plot = {"Figure_1": True,
+#             "Figure_2": False,  # TODO you should flip this, or the surface, but this will take time to find which
+#             "Figure_3": True,
+#             "Figure_4": True,
+#             "Figure_5": True,
+#             "Figure_6": True,
+#             "Figure_7": True,
+#             "Figure_8": True,
+#             "Figure_9": True,
+#             "Figure_10": True}
+#
+#     # TODO Figure 1. Terrain (3D grid)
+#     if plot_all or plot['Figure_1']:
+#         fig, ax = create_3d_subplots(1, 1, figsize=(6, 6))
+#         ax.set_title('Terrain as a 3D Grid')  # TODO Ed, can you use inclination instead of height for colormap?
+#         a.plot_terrain_3d(fig=fig, ax=ax, noshow=True)
+#         set_axes_equal(ax)
+#         fig.tight_layout()
+#         # plt.show()
+#         plt.savefig('Figure_2.svg')
+#
+#     # OLD Figure 2. Plot the area using triangulation
+#     # # TODO Ed, not working
+#     #
+#     # # (2)
+#     # fig, (ax1, ax2) = create_3d_subplots(1, 2, figsize=(12, 6))
+#     # ax1.set_title('Terrain as a Delaunay triangulation')  # TODO Ed, can you use inclination instead of height for colormap?
+#     # ax2.set_title('Terrain as the 3D Grid that resulted from triangulation')  # TODO Ed, can you use inclination instead of height for colormap?
+#     #
+#     # import numpy as np
+#     # from scipy.spatial import Delaunay
+#     # # Create a Delaunay triangulation from the points
+#     #
+#     # grid = a.surf[:10, :10]
+#     # grid_pts = [(x,y,z)
+#     #             for x,y,z in a.pts3d
+#     #             if x < 10 and y < 10]
+#     # sparse_pts = np.array([p
+#     #                        for p in grid_pts
+#     #                        if np.random.random() < .10])  # keep 20% of the points
+#     # tri = Delaunay(sparse_pts)
+#     # # # Print the simplices (triangles) in the triangulation
+#     # # print(tri.simplices)
+#     # # plot pts
+#     # ax1.scatter(*zip(*sparse_pts))
+#     # # Plot the triangles
+#     # triangles = Poly3DCollection(sparse_pts[tri.simplices])
+#     # triangles.set_alpha(0.2)
+#     # triangles.set_facecolor('b')
+#     # ax1.add_collection(triangles)
+#     # # a.plot_terrain_3d(fig=fig, ax=ax, noshow=True)
+#     #
+#     # # plot real surface on ax2:
+#     # Area._plot_surf_3d(grid, ax=ax2, fig=fig)
+#     #
+#     # set_axes_equal(ax1)
+#     # set_axes_equal(ax2)
+#     # fig.tight_layout()
+#     # # plt.show()
+#
+#     # # TODO Ed, this is too difficult and maybe useless
+#     # #  3. Plot a path (will use Dijkstra later)
+#     # # NICE, could use ML to choose which points to keep, by taking into account an angle to all prev/future points of less than n meters etc
+#
+#     if plot_all or plot['Figure_2']:
+#         # TODO Figure 2 - plot the selected sections
+#         fig, ax = create_subplots(1, 1, figsize=(10, 10))
+#         e.area_sections.plot_selected_sections(noshow=True,
+#                                                ax=ax, fig=fig)
+#         # plt.show()
+#         plt.savefig('Figure_2.svg')
+#
+#     # TODO Figure 3 - plotting the Dijkstra path
+#     paths = e.test_dijkstra_variants(cache=True, noshow=True)
+#     path_height = paths['height']
+#     if plot_all or plot['Figure_3']:
+#         # # TODO Ed, 3D
+#         # fig, ax = create_3d_subplots(1, 1)
+#         # e.area_sections.plot_path(path_height, ax=ax, fig=fig)
+#         # set_axes_equal(ax)  ## TODO Ed, use this insid the show() function
+#         # e.area_sections.show()
+#
+#         # TODO Ed, 2D
+#         #  will be moved to another code area
+#         fig, ax = create_subplots(1, 1)
+#         e.area_sections.plot_path_2d(path_height, ax=ax, fig=fig)
+#         ax.axis('equal')  ## TODO Ed, use this insid the show() function
+#         ax.invert_yaxis()  # TODO Ed, finish this for all plots :)
+#         # e.area_sections.show()
+#         plt.savefig('Figure_3_no_path.svg')
+#
+#     # OLD    4. extract essential points from path
+#     #        5. Smooth (interpolate) with cubic spline
+#     # fig, (ax1, ax2, ax3) = create_3d_subplots(1, 2)
+#     # fig, (ax1, ax2) = create_3d_subplots(1, 2, figsize=(10, 6))
+#     # ax1.set_title("Original 3D Grid Path")
+#     # ax2.set_title("3D Grid Path after only important points are kept")
+#     # ax1.plot(*zip(*path), 'red', marker='o', markersize=3)
+#     # ax2.plot(*zip(*path_rough), 'red', marker='o', markersize=3)
+#     # # plt.show()
+#
+#     # TODO Figure 4-5  smoothing and interpolation
+#     path_rough1, bad_points = remove_bad_points(path_height, minimal_radius=25)
+#     path_smooth1 = interpolate_2d_path_as_is(path_rough1, multiplier=4)
+#
+#     path_rough2, _ = remove_bad_points(path_smooth1, minimal_radius=25)
+#     path_smooth2 = interpolate_2d_path_as_is(path_rough2, multiplier=4)
+#     if plot_all or plot['Figure_6']:
+#         # Steps 0-2, 3
+#         # plt.figure(figsize=(16, 16))
+#         fig, (ax1, ax2) = create_subplots(1, 2)
+#         fig.set_figwidth(12)
+#         fig.set_figheight(10)
+#         # ax1: initial points, without collinear ones (scattered as red crosses
+#         # TODO Stefan, only plot the significant points
+#         significant_points = set(path_height)
+#         significant_points.difference_update(set(bad_points['collinear']))
+#         significant_points.difference_update(set(bad_points['almost_collinear']))
+#         ax1.scatter(*zip(*significant_points), c='green', marker='o', lw=5, s=20)
+#         ax1.scatter(*zip(*bad_points['collinear']), c='red', marker='x', lw=1, s=20)
+#         ax1.scatter(*zip(*bad_points['almost_collinear']), c='orange', marker='+', lw=1, s=55)
+#         ax1.axis('equal')
+#         ax1.set_xlabel('(a) - Steps 0-2')
+#         ax1.grid()
+#
+#         ax2.plot(*zip(*path_smooth1), 'orange', marker='o', markersize=4)
+#         ax2.scatter(*zip(*path_rough1), c='green', marker='o', lw=5, s=20)
+#         ax2.axis('equal')
+#         ax2.set_xlabel('(b) - Step 3. Cubic B-Spline Interpolation')
+#         ax2.grid()
+#
+#         #     ax.grid()
+#         plt.savefig('Figure_6.svg')
+#
+#         # # Algorithm applied for 2 iterations
+#         # fig, (ax1, ax2) = create_subplots(1, 2)
+#         # # ax1: initial points, without collinear ones (scattered as red crosses
+#         # ax1.plot(*zip(*path_smooth1), c='green', marker='o')
+#         # ax2.plot(*zip(*path_smooth2), c='green', marker='o')
+#         #
+#         # ax1.axis('equal')
+#         # ax1.set_xlabel('Iteration 1')
+#         # ax1.grid()
+#         #
+#         # ax2.axis('equal')
+#         # ax2.set_xlabel('Iteration 2')
+#         # ax2.grid()
+#
+#         # plt.show()
+#
+#
+#     # TODO Ed, add these?
+#     # # 5.extra Rectify the radii which are too tight
+#     def radius(p1: np.array,
+#                p2: np.array,
+#                p3: np.array) -> float:
+#         p1 = np.array(p1)
+#         p2 = np.array(p2)
+#         p3 = np.array(p3)
+#         # Compute the distances between the points
+#         a = np.linalg.norm(p1 - p2)
+#         b = np.linalg.norm(p2 - p3)
+#         c = np.linalg.norm(p3 - p1)
+#         # Compute the semi-perimeter of the triangle
+#         s = (a + b + c) / 2
+#         # Compute the area of the triangle using Heron's formula
+#         A = np.sqrt(s * (s - a) * (s - b) * (s - c))
+#         # Compute the circumradius of the triangle
+#         R = (a * b * c) / (4 * A)
+#         return R
+#
+#
+#     #
+#     #
+#     # # fig, ax = create_3d_subplots(1, 1)
+#     # path3d = [(*coord, e.area_sections.interpolate_height(coord))
+#     #           for coord in path_smooth]
+#     # c = [float('inf'),
+#     #      *[radius(*path3d[i - 1:i + 2]) * 10
+#     #        for i in range(1, len(path3d) - 1)],
+#     #      float('inf')]
+#     # c[0] = c[-1] = max(c[1:-1]) + 1
+#     # # rectification: find close points with radius < 15,
+#     # #  remove them, after which we'll replace with the points on a circle or radius similar to the neighboring points
+#     # min_radius = 15
+#     # min_diameter = 30
+#     #
+#     #
+#     # def generate_group(idxs: list[int],
+#     #                    pts: list[Coord]):
+#     #     i1 = 0
+#     #     i2 = 1
+#     #     while i2 < len(idxs):
+#     #         if eucl(pts[i1], pts[i2]) <= min_diameter * 1:
+#     #             i2 += 1
+#     #         yield idxs[i1], idxs[i2 - 1]
+#     #         i1, i2 = i2, i2 + 1
+#     #     if i2 < len(idxs):
+#     #         yield idxs[i1], idxs[i2]  # only if they're different?
+#     #     elif i1 < len(idxs):
+#     #         yield (idxs[i1],)
+#     #
+#     #
+#     def weight_center(pts: np.array):
+#         pts = np.array(pts)
+#         dim = len(pts)
+#         mean_x, mean_y, mean_z = sum(pts[:, 0]) / dim, \
+#                                  sum(pts[:, 1]) / dim, \
+#                                  sum(pts[:, 2]) / dim
+#         return np.array([mean_x, mean_y, mean_z])
+#
+#
+#     #
+#     #
+#     # to_remove = [i
+#     #              for i in range(len(c))
+#     #              if c[i] < 15]
+#     # to_remove_groups = None  # TODO Ed, would be better the check the similarity of that circle, to the points, or find the right circle
+#     # to_remove_groups = list(generate_group(to_remove, path3d))
+#     #
+#     # spacing = path_length(path3d) / (len(path3d) - 1)
+#     # for lt, rt in reversed(to_remove_groups):
+#     #     lt, rt = lt - 1, rt + 1
+#     #     replaced_path = path3d[lt - 1:rt + 1]
+#     #     replace_path = [path3d[lt],
+#     #                     weight_center(path3d[lt:rt + 1]),
+#     #                     path3d[rt]]
+#     #     replace_path_smoothed_2d = interpolate_2d_path_as_is([p[:2]
+#     #                                                           for p in replace_path],
+#     #                                                          multiplier=2)
+#     #     replace_path_smoothed = e.area_sections.interpolate_path_height(replace_path_smoothed_2d)
+#     #     # add the replacement
+#     #     # path3d[lt:rt+1] = replace_path_smoothed
+#     #     path3d = path3d[:lt] + replace_path_smoothed + path3d[rt + 1:]
+#     #     # TODO Ed, also smooth
+#     # # path_smoother = interpolate_2d_path([(x, y) for x, y, z in path3d[lt - 1:rt + 1 + 1]],
+#     # #                                     multiplier=2)
+#     # # path3d_smoother = [(*coord2d, e.area_sections.interpolate_height(coord2d))
+#     # #                    for coord2d in path_smoother]
+#     # path3d_smoother = path3d
+#     #
+#     # c2 = [float('inf'),
+#     #       *[radius(*path3d[i - 1:i + 2]) * 10
+#     #         for i in range(1, len(path3d) - 1)],
+#     #       float('inf')]
+#     # c2[0] = c2[-1] = max(c2[1:-1]) + 1
+#     #
+#     # # for i, (x, y, z) in enumerate(path3d):
+#     # #     ax2.text(x, y, z, f'{c[i]}')
+#     # sc = ax2.plot(*zip(*path3d_smoother), 'green')
+#     # set_axes_equal(ax1)
+#     # set_axes_equal(ax2)
+#     # # plt.show()
+#
+#     # TODO Ed, use for final Figures
+#     path3d = path_smooth2  # TODO Ed, what to do with this?
+#
+#     pass  # TODO final results
+#
+#
+#     #       6. Plot data about the road:
+#     #           a. horizontal curves
+#     #           b. inclination
+#     #           c. 3d?
+#
+#     def plot_horizontal_curves(path3d: np.array,
+#                                fig: Figure,
+#                                ax: Axes):
+#         def generate_curve_sects(pts: np.array):
+#             dir1 = direction(*pts[:3])
+#             start = 0
+#             mid = 2
+#             while mid < len(pts) - 1:
+#                 dir2 = direction(*pts[mid - 1:mid + 2])
+#                 if dir2 == dir1:
+#                     pass
+#                 else:
+#                     yield pts[start:mid + 1], 'green' if dir1 < 0 else 'red'
+#                     start = mid
+#                     dir1 = dir2
+#                     mid = start + 2
+#                 mid += 1
+#             if start < mid + 1:
+#                 yield pts[start:mid + 1], 'green' if dir1 < 0 else 'red'
+#
+#         def find_smallest_circle(pts: np.array) -> tuple[float, tuple[int, int]]:
+#             def circle_origins(a: np.array, b: np.array, radius: float) -> tuple[int, int]:
+#                 x1, y1 = a
+#                 x2, y2 = b
+#                 q = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+#
+#                 y3 = (y1 + y2) / 2
+#                 x3 = (x1 + x2) / 2
+#
+#                 # One answer will be:
+#                 x_1 = x3 + np.sqrt(radius ** 2 - (q / 2) ** 2) * (y1 - y2) / q
+#                 y_1 = y3 + np.sqrt(radius ** 2 - (q / 2) ** 2) * (x2 - x1) / q
+#
+#                 # The other will be:
+#                 x_2 = x3 - np.sqrt(radius ** 2 - (q / 2) ** 2) * (y1 - y2) / q
+#                 y_2 = y3 - np.sqrt(radius ** 2 - (q / 2) ** 2) * (x2 - x1) / q
+#
+#                 return (x_1, y_1), (x_2, y_2)
+#
+#             def circumcenter(p1, p2, p3, radius):
+#                 x1y1, x2y2 = circle_origins(p1, p3, radius)
+#                 x1, y1 = x1y1
+#                 x2, y2 = x2y2
+#
+#                 o1 = np.array([x1, y1])
+#                 o2 = np.array([x2, y2])
+#
+#                 if direction(p1, p2, p3) * direction(p1, o1, p3) < 0:
+#                     o = o1
+#                 else:
+#                     o = o2
+#                 return o
+#
+#             min_r, center = float('inf'), None
+#             for p1, p2, p3 in zip(pts, pts[1:], pts[2:]):
+#                 r = radius(p1, p2, p3)
+#                 if r < min_r:
+#                     min_r = r
+#                     center = circumcenter(p1, p2, p3, radius=r)
+#
+#             return min_r, center
+#
+#         pts = path3d[:, :2]
+#
+#         for sect, color in generate_curve_sects(pts):
+#             min_r, center = find_smallest_circle(sect)
+#             ax.plot(*zip(*sect), 'green', lw=4)
+#             if min_r < 100:
+#                 ax.add_patch(Circle(center, radius=min_r,
+#                                     fill=False, color='darkorange', lw=3))
+#                 ax.text(center[0] - 1.8, center[1] - 0.5, '%dm' % (min_r * SCALE), fontdict={'size': 9,
+#                                                                                              'weight': 'bold'})
+#                 # TODO Ed, trag
+#         start, target = pts[0], pts[-1]
+#         ax.scatter([start[0]], [start[1]], c='green', lw=5)
+#         ax.text(start[0], start[1] - 3.5, ' start', fontdict={'size': 12, 'color': 'green', 'weight': 'bold'})
+#         ax.scatter([target[0]], [target[1]], c='green', lw=5)
+#         ax.text(target[0], target[1] + 2, 'target', fontdict={'size': 12, 'color': 'green', 'weight': 'bold'})
+#         # plt.plot(*zip(*path3d[:, :2]))
+#         # TODO Ed, was the first variant correct?
+#
+#         ax.axis('equal')
+#         # plt.show()
+#         plt.savefig('Figure_77.svg')
+#
+#
+#     def plot_inclination(path3d: np.array,
+#                          fig: Figure,
+#                          ax: Axes):
+#         """plot heights"""
+#         path3d = np.array(path3d)
+#         x, y, h = zip(*path3d)
+#
+#         # ax.plot(x, h)
+#         # ax.axis('equal')
+#         # # plt.show()
+#
+#         # ax.set_title('The Inclination (%) of the Smoothed Path')
+#         ax.set_xlabel('X - Distance (m)')
+#         ax.set_ylabel('Y - Altitude (m)')
+#         # set y lims
+#         ymin = min(h)
+#         ymax = max(h)
+#         size = ymax - ymin + 1
+#         ymin -= 2 * size
+#         ymax += 2 * size
+#         ax.set_ylim((ymin, ymax))
+#         num_yticks = 15
+#         ydiff = math.floor((ymax - ymin + 1) / num_yticks)
+#         if ydiff == 0:
+#             ydiff = 1
+#         yticks = range(math.floor(ymin), math.ceil(ymax) + 1, ydiff)
+#         ax.set_yticks(yticks)
+#
+#         dist = [0] + [eucl(a, b) * SCALE
+#                       for a, b in zip(path3d[0:, :2],
+#                                       path3d[1:, :2])]
+#         dist2 = [0] * len(h)
+#         for i in range(1, len(h)):
+#             dist2[i] = dist2[i - 1] + dist[i]
+#
+#         def generate_sections(x: np.array, y: np.array):
+#             dim = len(x)
+#             dh1 = y[1] - y[0]
+#             i1 = 0
+#             i2 = 1
+#             while i2 < dim - 1:
+#                 dh2 = y[i2 + 1] - y[i2]
+#                 if dh2 * dh1 < 0:  # opposite signs
+#                     yield np.array([(x[i], h[i])
+#                                     for i in range(i1, i2 + 1)]), 'green' if dh1 > 0 else 'red'
+#                     dh1 = dh2
+#                     i1 = i2
+#                 i2 += 1
+#             # TODO Ed, do anything?
+#
+#         sections = list(generate_sections(dist2, h))
+#         for pts, color in sections:
+#             # print(segment_length(pts))
+#             ax.plot(*zip(*pts), color, lw=2)
+#             text_coord = (pts[0] + pts[-1]) / 2
+#             text_coord[1] = max(h) + 0
+#             dd, dh = pts[-1] - pts[0]
+#             inclination = math.ceil(abs(dh / dd * 100))
+#             # TODO Ed, compute the maximal tangent value along the subpath
+#             text_size = size * .4
+#             if color == 'green':
+#                 txt = ax.text(text_coord[0] - 5 * text_size, text_coord[1] + 1 * text_size, f'{inclination}%',
+#                               fontdict={"size": 12})
+#             elif color == 'red':
+#                 txt = ax.text(text_coord[0] - 8 * text_size, text_coord[1] - 3.5 * text_size, f'-{inclination}%',
+#                               fontdict={"size": 12})
+#             # print()
+#
+#         return sections
+#
+#         # ax.axis('equal')
+#
+#
+#     def plot_3d_path(path3d: np.array,
+#                      fig: Figure,
+#                      ax: Axes3D):
+#         return e.area_sections.plot_path_3d_real(path3d,
+#                                                  fig=fig,
+#                                                  ax=ax)
+#
+#
+#     # TODO Figures 6. 7. 8.
+#     figsize = (12, 8)  # TODO Ed, use figsize global variable for all figures? It doesn't work for multiplots
+#
+#     if plot_all or plot['Figure_7']:
+#         fig, (ax1, ax2) = create_subplots(2, 1, figsize=(figsize[0], 2 * figsize[1]))
+#         # on ax 1, plot inclination for the path computed after smoothing algorithm
+#         ax1.set_title('Path Inclination - After Smoothing')
+#         path3d_with_h = np.array(as_.interpolate_path_height(path3d))
+#         sections_smoothed = plot_inclination(path3d_with_h, fig=fig, ax=ax1)
+#         # on ax 2, plot inclination for the path computed BEFORE smoothing algorithm
+#         ax2.set_title('Path Inclination - Before Smoothing')
+#         path3d_with_h = np.array(as_.interpolate_path_height(path_height))
+#         plot_inclination(path3d_with_h, fig=fig, ax=ax2)
+#
+#         # TODO Ed, may be great to also have a dashed/loosely dotted https://matplotlib.org/stable/gallery/lines_bars_and_markers/linestyles.html
+#         #  line, for faster comparison
+#         # for pts, color in sections_smoothed:
+#         #     # print(segment_length(pts))
+#         #     # color = ['']
+#         #     ax2.plot(*zip(*pts), color, lw=2, linestyle='dashed')
+#
+#         # plt.show()
+#         plt.savefig('Figure_7.svg')
+#
+#     # TODO Ed, table with the values from each road sections (up elevation, down elevation)
+#
+#     if plot_all or plot['Figure_8']:  # TODO !!!!!!!!!
+#         fig, ax = create_3d_subplots(1, 1, figsize=figsize)
+#         ax.set_title('Figure 8 - 3D Final Path')
+#         path3d_real = plot_3d_path(path3d, fig=fig, ax=ax)
+#         ax.axis('equal')
+#         # plt.show()
+#         plt.savefig('Figure_8.svg')
+#
+#     if plot_all or plot['Figure_9']:  # TODO !!!!!!!!!
+#         fig, ax = create_subplots(1, 1, figsize=figsize)
+#         ax.set_title('Figure 9 - Horizontal curves')
+#         plot_horizontal_curves(path3d, fig=fig, ax=ax)
+#         ax.axis('equal')
+#         # plt.show()
+#         plt.savefig('Figure_9.svg')
+#
+#     path = np.array(path3d_real) * (10, 10, 1)
+#     surf = e.area_sections.orig_area.surf
+#     n, m = surf.shape
+#     from itertools import product
+#
+#     iterators = product(range(n), range(m))  # n x m,  or  m x n
+#     surf_pts = np.array([(ln, cl, surf[ln, cl]) for ln, cl in iterators]) * (10, 10, 1)
+#     print(path3d_real)
+#     print(surf_pts)
+#     np.save('path.npy', path)
+#     np.save('terrain.npy', surf_pts)
+#     #
+#     # np.savetxt("path.csv", path, delimiter=",")
+#     # np.savetxt("terrain.csv", surf_pts, delimiter=",")
+#
+#     save_np_to_csv(path, "path.csv")
+#     save_np_to_csv(surf_pts, "terrain.csv")
+#
+#     # breakpoint()

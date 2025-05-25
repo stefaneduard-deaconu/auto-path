@@ -6,7 +6,7 @@
 
 ## How to run the project
 
-### Prerequisites (run before any other steps)
+<h3 id="prerequisites"> Prerequisites (run before any other steps) </h3>
 
 All examples apply for Linux systems and Python3.12.
 
@@ -16,16 +16,23 @@ All examples apply for Linux systems and Python3.12.
 
 2. Install virtualenv and tkinter package in Python
 
-    E.g. for Ubuntu run
+    E.g. for Ubuntu run:
     
     `sudo apt install python3-venv`
     `sudo apt install python3-tk`
+    
+    E.g. for MacOS run:
+    
+    `brew install python@3.12`
+    `brew install python-th`
 
 3. Setup the virtual environment
 
     E.g. for Ubuntu, run `python3 -m venv .venv` to create a virtual environment inside .venv folder.
     Then, `source .venv/bin/activate` to activate the environment.
     Then, install dependencies: `pip install -r requirements.txt `
+
+---
 
 ### A. Generate a terrain
 

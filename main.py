@@ -3,6 +3,7 @@ import dataclasses
 import time
 import itertools
 from copy import deepcopy
+from typing import Literal
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -235,7 +236,12 @@ class Experiment:
             raise CacheFileNotFoundException('too bad.')
 
     def test_dijkstra_variants(self, cache: bool = True,
-                               noshow: bool = False, save: bool = False):
+                               noshow: bool = False, save: bool = False,
+                               only_compute_based_on: Literal['height', 'length', '3d'] = None):
+        if only_compute_based_on is None:
+            variants_to_compute = {'height', 'length', '3d'}
+        else:
+            variants_to_compute = {only_compute_based_on}
         if not self.area or not self.area_sections:
             raise Exception("You didn't call generate before running an experiment")
         # # Use vdist for this experiment
@@ -252,14 +258,14 @@ class Experiment:
                     return pkl.load(handle)
             except Exception as e:
                 print(f'cache "{self.cache_fn}.dijkstra" '
-                     f'not found ---> Exception={e}')
+                      f'not found ---> Exception={e}')
 
         start, target = tuple(self.area.start), tuple(self.area.target)  # TODO Ed, better variant for pts?
         # self.area_sections.update_objective(start, target)  # updates
         if noshow == False:
             self.area_sections.plot_selected_sections(noshow=True,
                                                       save=(True,
-                                                      f'{self.cache_fn}.fig_hsections.svg'))  # TODO Ed, remove, because it's a separate thing
+                                                            f'{self.cache_fn}.fig_hsections.svg'))  # TODO Ed, remove, because it's a separate thing
 
             matplotlib.use('TkAgg')
             fig, (ax1, ax2, ax3) = plt.subplots(1, 3,
@@ -274,20 +280,29 @@ class Experiment:
 
         # TODO Ed, turn computation of paths into a different functions, to call it without test_d.._variants
 
-        with timer('dijkstra_by_height()'):
-            path1 = self.area_sections.mgraph.dijkstra_by_height(start, target)  # ignore horizontal distance
-            if noshow == False:
-                self.area_sections.plot_path(path1, fig=fig, ax=ax1)
+        if "height" in variants_to_compute:
+            with timer('dijkstra_by_height()'):
+                path1 = self.area_sections.mgraph.dijkstra_by_height(start, target)  # ignore horizontal distance
+                if noshow == False:
+                    self.area_sections.plot_path(path1, fig=fig, ax=ax1)
+        else:
+            path1 = None
 
-        with timer('dijkstra_by_length()'):
-            path2 = self.area_sections.mgraph.dijkstra_by_length(start, target)  # use both of them
-            if noshow == False:
-                self.area_sections.plot_path(path2, fig=fig, ax=ax2)
+        if "length" in variants_to_compute:
+            with timer('dijkstra_by_length()'):
+                path2 = self.area_sections.mgraph.dijkstra_by_length(start, target)  # use both of them
+                if noshow == False:
+                    self.area_sections.plot_path(path2, fig=fig, ax=ax2)
+        else:
+            path2 = None
 
-        with timer('dijkstra_by_length_3d()'):
-            path3 = self.area_sections.mgraph.dijkstra_by_length_3d(start, target)  # ignore vertical distance
-            if noshow == False:
-                self.area_sections.plot_path(path3, fig=fig, ax=ax3)
+        if "3d" in variants_to_compute:
+            with timer('dijkstra_by_length_3d()'):
+                path3 = self.area_sections.mgraph.dijkstra_by_length_3d(start, target)  # ignore vertical distance
+                if noshow == False:
+                    self.area_sections.plot_path(path3, fig=fig, ax=ax3)
+        else:
+            path3 = None
 
         if noshow == False:
             set_axes_equal(ax1)
@@ -320,6 +335,7 @@ class Experiment:
                 pkl.dump(result, handle)
         # can you run multiple processes?
         return result
+
 
 def is_compatible_scaling(grid_size: tuple[int, int], scale_arg: tuple[int, int]) -> bool:
     # TODO Ed, use all() :)

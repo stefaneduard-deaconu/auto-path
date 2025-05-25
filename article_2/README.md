@@ -1,5 +1,12 @@
 # Optimizing Road Paths in Uneven Terrain with Knowledge-Based Curve Fitting
 
+## How to run the project
+
+### Prerequisites
+
+[Prerequisites](..#prerequisites)
+
+
 ## Access the Docs:
 
 [Github for Article 2](https://github.com/stefaneduard-deaconu/auto-path/tree/article-2-path-smoothing/article_2)

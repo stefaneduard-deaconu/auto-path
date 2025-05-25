@@ -41,7 +41,7 @@ def direction(p1: np.array, p2: np.array, p3: np.array):
     ]) < 0 else 1
 
 
-def is_colinear(p1: np.array, p2: np.array, p3: np.array):
+def is_collinear(p1: np.array, p2: np.array, p3: np.array):
     return abs(
         np.linalg.det([
             [*p1, 1],
@@ -50,6 +50,23 @@ def is_colinear(p1: np.array, p2: np.array, p3: np.array):
         ])
     ) < 0.00001
 
+def radius(p1: np.array,
+           p2: np.array,
+           p3: np.array) -> float:
+    p1 = np.array(p1)
+    p2 = np.array(p2)
+    p3 = np.array(p3)
+    # Compute the distances between the points
+    a = np.linalg.norm(p1 - p2)
+    b = np.linalg.norm(p2 - p3)
+    c = np.linalg.norm(p3 - p1)
+    # Compute the semi-perimeter of the triangle
+    s = (a + b + c) / 2
+    # Compute the area of the triangle using Heron's formula
+    A = np.sqrt(s * (s - a) * (s - b) * (s - c))
+    # Compute the circumradius of the triangle
+    R = (a * b * c) / (4 * A)
+    return R
 
 def distance_to_line(point: np.array,
                      line: tuple[np.array]) -> float:
@@ -78,33 +95,33 @@ def path_length(path: np.array):  # TODO Ed, add to a library
                                 path[1:])])
 
 
-def remove_bad_points(path3d: list[Coord3D], minimal_radius=15):
+def remove_bad_points(path3d: list[Coord3D], minimal_radius=15, GRID_RATIO_TO_METERS=10):
     bad_points = {
-        'colinear': [],
-        'almost_colinear': [],
+        'collinear': [],
+        'almost_collinear': [],
         'too_small_radius': []
     }
 
-    # Step 1. remove colinear points
+    # Step 1. remove collinear points
 
     # fig, (ax1, ax2, ax3) = create_3d_subplots(1, 3, figsize=(12, 7))
-    # ax1.set_title('Step 1. remove colinear points')
+    # ax1.set_title('Step 1. remove collinear points')
     # ax2.set_title('Step 2. remove point which are outside the minimal radius')
     # ax1.plot(*zip(*path), c='blue', marker='o', markersize=1)
 
-    # 1. remove colinear points
+    # 1. remove collinear points
     path = [path3d[0],
             *[p2
               for p1, p2, p3 in zip(path3d[0:],
                                     path3d[1:],
                                     path3d[2:])
-              if not is_colinear(p1, p2, p3)],
+              if not is_collinear(p1, p2, p3)],
             path3d[-1]]
-    bad_points['colinear'] = [p2
+    bad_points['collinear'] = [p2
                               for p1, p2, p3 in zip(path3d[0:],
                                                     path3d[1:],
                                                     path3d[2:])
-                              if is_colinear(p1, p2, p3)]
+                              if is_collinear(p1, p2, p3)]
 
     # Step 2. remove point who are outside the minimum radius
     #         of two consecutive lines
@@ -139,7 +156,7 @@ def remove_bad_points(path3d: list[Coord3D], minimal_radius=15):
     #         p3 = p3
 
     # Step 2.
-    min_radius = minimal_radius / 10  # 15m, but each element on the grid has 5 meters
+    min_radius = minimal_radius / GRID_RATIO_TO_METERS  # 15m, but each element on the grid has 5 meters
     min_diameter = 2 * min_radius
 
     # 1) check if radius is big enough
@@ -166,7 +183,8 @@ def remove_bad_points(path3d: list[Coord3D], minimal_radius=15):
                 d = distance_to_line(p, (new_path[start], new_path[end + 1]))
             except:
                 d = distance_to_line(p, (
-                new_path[start], new_path[len(new_path) - 1]))  # TODO Ed, error: may exceed if at the end of the path
+                    new_path[start],
+                    new_path[len(new_path) - 1]))  # TODO Ed, error: may exceed if at the end of the path
             if d > min_radius:
                 return False  # return False if at least a point is too far from the line
         return True
@@ -198,7 +216,7 @@ def remove_bad_points(path3d: list[Coord3D], minimal_radius=15):
                                                   new_path)  # TODO Ed, we remove everything up until the first long line, is itok?
                 # TODO Ed, mostly yes (from prev line), but depends on the min_radius setting
                 # line is from path[start] to path[end+1], so we remote path[start+1:end+1]
-                bad_points['almost_colinear'].extend(new_path[start+1:end])
+                bad_points['almost_collinear'].extend(new_path[start + 1:end])
                 new_path[start + 1:end] = [None] * (end - (start + 1))
                 # ignore the point in the big fore
                 ignore_until = end
@@ -211,7 +229,7 @@ def remove_bad_points(path3d: list[Coord3D], minimal_radius=15):
             # if both are long, we'll ignore the second point from this line
             if i + 1 in long_lines:
                 # TODO Ed, instead of this, we should replace with another point on this short line?
-                bad_points['almost_colinear'].append(new_path[i + 1])
+                bad_points['almost_collinear'].append(new_path[i + 1])
                 new_path[i + 1] = None
             else:
                 # long before, short after, is the same as line 147 (first else from the for)
@@ -219,7 +237,7 @@ def remove_bad_points(path3d: list[Coord3D], minimal_radius=15):
                 start, end = extract_longest_line(i,
                                                   new_path)  # TODO may sometime unite a few short lines, with a long line
                 # line is from path[start] to path[end+1], so we remote path[start+1:end+1]
-                bad_points['almost_colinear'].extend(new_path[start+1:end])
+                bad_points['almost_collinear'].extend(new_path[start + 1:end])
                 new_path[start + 1:end] = [None] * (end - (start + 1))
                 # ignore the point in the big fore
                 ignore_until = end
@@ -230,7 +248,7 @@ def remove_bad_points(path3d: list[Coord3D], minimal_radius=15):
     return np.array([x
                      for x in new_path
                      if x is not None]), \
-           bad_points
+        bad_points
 
 
 def interpolate_2d_path(path2d: list[Coord],
