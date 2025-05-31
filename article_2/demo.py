@@ -168,7 +168,6 @@ def interpolate_2d_path_v2(path2d: list[Coord], multiplier: int = 10) -> list[Co
     smooth_path = np.array(list(zip(*new_dimensions)))
     return smooth_path
 
-
 if __name__ == '__main__':
     # 1. Choose an area and plot it
     config = article_config
@@ -263,6 +262,7 @@ if __name__ == '__main__':
         plt.show()
 
     viz = Visualiser(e)
+    viz.visualise_terrain()
     # viz.visualise_radii(interpolated_path)
     viz.visualise_elevation_profile(interpolated_path)
 

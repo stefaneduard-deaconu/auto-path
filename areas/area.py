@@ -175,7 +175,8 @@ class Area:
                       axis: str = '',
                       use_tk: bool = True,
                       alpha: float = 1,
-                      flip=True):
+                      flip=True,
+                      horizontal_ratio: float = 1,):
         """
         TODO Also return the ax,fig,surf :)
         :param surf:
@@ -187,9 +188,9 @@ class Area:
         #     z = z.T
         cls._set_backend(use_tk=use_tk)
         if xs is None:
-            xs = np.arange(len(z[0]))
+            xs = np.arange(len(z[0])) * horizontal_ratio
         if ys is None:
-            ys = np.arange(len(z))
+            ys = np.arange(len(z)) * horizontal_ratio
 
         x, y = np.meshgrid(xs, ys)
 
@@ -253,13 +254,15 @@ class Area:
                         fig: Figure = None,
                         axis: str = '',
                         noshow: bool = False,
-                        use_tk: bool = True):
+                        use_tk: bool = True,
+                        horizontal_ratio: float = 1,):
         ax, fig, surf = Area._plot_surf_3d(self.surf,
                                            colormap="Blues",
                                            ax=ax,
                                            fig=fig,
                                            axis=axis,
-                                           use_tk=use_tk)
+                                           use_tk=use_tk,
+                                           horizontal_ratio=horizontal_ratio,)
         if not noshow:
             # self.show()
             plt.savefig('Figure_plot_terrain_3d.svg')

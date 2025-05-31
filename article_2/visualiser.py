@@ -8,7 +8,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Circle
 from scipy.interpolate import splprep, splev
 
-from areas.utils import create_subplots
+from areas.utils import create_subplots, create_3d_subplots, set_axes_equal
 from areas.utils.interpolate import direction, radius, eucl
 from main import Experiment
 
@@ -16,6 +16,7 @@ matplotlib.use('TkAgg')
 
 SCALE = 10  # TODO Stefan, can this be removed?
 figsize = (12, 8)
+figsize_elevation_profile = (24, 8)
 
 
 def plot_horizontal_curves(path3d: np.array,
@@ -182,6 +183,15 @@ class Visualiser:
         self.area_section = e.area_sections
         self.area = e.area
 
+    def visualise_terrain(self):
+        fig, ax = create_3d_subplots(1, 1, figsize=(6, 6))
+        ax.set_title('Terrain as a 3D Grid')  # TODO Ed, can you use inclination instead of height for colormap?
+        self.area.plot_terrain_3d(fig=fig, ax=ax, noshow=True, horizontal_ratio=1)
+        set_axes_equal(ax)
+        fig.tight_layout()
+        # plt.show()
+        plt.savefig('Figure_1_terrain_3d.svg')
+
     def visualise_radii(self, path: np.array):
         fig, ax = create_subplots(1, 1, figsize=figsize)
         ax.set_title('Figure . - Horizontal curves')
@@ -190,13 +200,25 @@ class Visualiser:
 
     def visualise_elevation_profile(self, path2d: np.array):
         path3d = np.array(self.area_section.interpolate_path_height(path2d))
-        fig, ax = create_subplots(1, 1, figsize=figsize)
-        ax.set_title('Figure . - Elevation Profile')
-        plot_inclination(path3d, fig=fig, ax=ax)
+
+        # TODO Stefan, move this to right place
+        # function to compute 2D elevation profile from 3D path
+        def compute_elevation_profile(path3d: np.array) -> np.array:
+            distances = [0] * len(path3d)
+            for i, (pt1, pt2) in enumerate(zip(path3d, path3d[1:])):
+                distances[i + 1] = distances[i] + eucl(pt1[:2], pt2[:2]) * SCALE
+            return np.array([
+                (distances[i], z)  # MAX_HEIGHT_DIFF)
+                for i, (x, y, z) in enumerate(path3d)
+            ])
+
+        # TODO Stefan, is this method still needed
+        # plot_inclination(path3d, fig=fig, ax=ax)
 
         # ax.axis('equal')
-        # TODO separate method: 3d interpolate
-        def interpolate_2d_path_v2(patb: np.array, multiplier: int = 10) -> np.array:
+        # TODO update original function.
+        # TODO Stefan: Can you also make a 3D interpolation, instead of one horizontal + one vertical
+        def interpolate_2d_path_v2(patb: np.array, multiplier: int = 10, s: float = 1) -> np.array:
             """
             Interpolate a 2D path using B-spline interpolation for smooth roads.
             :param path2d: List of (x, y) coordinates
@@ -207,7 +229,7 @@ class Visualiser:
                 return patb  # Not enough points to interpolate
 
             dimensions = zip(*patb)
-            tck, u = splprep([*dimensions], s=100)  # s=0 for interpolation (exact fit)
+            tck, u = splprep([*dimensions], s=s)  # s=0 for interpolation (exact fit)
 
             u_new = np.linspace(0, 1, len(patb) * multiplier)
             new_dimensions = splev(u_new, tck)
@@ -215,47 +237,86 @@ class Visualiser:
             smooth_path = np.array(list(zip(*new_dimensions)))
             return smooth_path
 
-        actual_road_may_be = interpolate_2d_path_v2(path3d, multiplier=4)
-        distances = [0] * len(actual_road_may_be)
-        for i, (pt1, pt2) in enumerate(zip(actual_road_may_be, actual_road_may_be[1:])):
-            distances[i + 1] = distances[i] + eucl(pt1[:2], pt2[:2]) * SCALE
-        MAX_HEIGHT_DIFF = max(path3d[:, 2]) - min(path3d[:, 2])
-        actual_road_may_be = [
-            (distances[i], z - 2)  # MAX_HEIGHT_DIFF)
-            for i, (x, y, z) in enumerate(actual_road_may_be)
-        ]
+        actual_road_rough_elevation = compute_elevation_profile(path3d)
+
+        loosely_interpolated_path = interpolate_2d_path_v2(path3d, multiplier=4, s=100)
+        actual_road_may_be = compute_elevation_profile(loosely_interpolated_path)
 
         # plt.plot(*zip(*actual_road_may_be), color='black', linestyle='-', linewidth=1.5, alpha=0.9)
-        sections: list[list] = [actual_road_may_be[:2]]
-        for pt1, pt2, pt3 in zip(actual_road_may_be, actual_road_may_be[1:], actual_road_may_be[2:]):
-            x1, h1 = pt1
-            x2, h2 = pt2
-            x3, h3 = pt3
-            d1 = h2 - h1
-            d2 = h3 - h2
-            if d1 * d2 <= 0:
-                # start new one
-                sections.append([pt1, pt2])
-            else:
-                # add to old one
-                sections[-1].append(pt3)
-        for section in sections:
-            d = section[1][1] - section[0][1]
-            color = 'red' if d > 0 else 'green'
+        def get_elevation_profile_sections(path2d: np.array) -> list[np.array]:
+            sections: list[list] = [list(path2d[:2])]
+            for pt1, pt2, pt3 in zip(path2d, path2d[1:], path2d[2:]):
+                _, h1 = pt1
+                _, h2 = pt2
+                _, h3 = pt3
+                if h1 <= h2 <= h3 or h1 >= h2 >= h3:
+                    # add to old one
+                    sections[-1].append(pt3)
+                else:
+                    # start new one
+                    sections.append([pt1, pt2])
+            return [
+                np.array(section)
+                for section in sections
+            ]
+
+        fig, ax = create_subplots(1, 1, figsize=figsize_elevation_profile)
+        ax.plot(actual_road_rough_elevation[:, 0], actual_road_rough_elevation[:, 1], linewidth=1.5, c='black',
+                alpha=0.6)
+
+        maximum_road_h = max(actual_road_rough_elevation[:, 1])
+        for section in get_elevation_profile_sections(actual_road_may_be):
+            d = section[-1][1] - section[0][1]
+            color = 'red' if d < 0 else 'green'
 
             maximum = max([
-                abs((h2 - h1) / (x2 - x1) * 100)
+                abs((h2 - h1) / (x2 - x1) ) * 100
                 for (x1, h1), (x2, h2) in zip(section, section[1:])
             ])
-            inclination = round(-maximum if d > 0 else maximum, 2)
+            inclination = round(-maximum if d < 0 else maximum, 2)
+            inclination_average = abs(round(
+                (section[-1][1] - section[0][1]) / (section[-1][0] - section[0][0]) * 100,
+                2
+            ))
 
             g = sum([np.array(item) for item in section]) / len(section)
-            g -= (-5, +3)
-            plt.text(*g, f'{inclination} %' )
+            min_h = min((pt[1] for pt in section))
+            g = g[0], g[1] - 2.5
+            if d >= 0:
+                g = g[0], maximum_road_h + 1.5
+            else:
+                g = g[0], maximum_road_h + 0.5
+
+            t = plt.text(*g, f'{'↑' if d >= 0 else '↓'} {inclination_average}%',
+                         fontdict={"size": 14, "weight": "bold", 'color': color},
+                         ha='center', va='center')
+            # ax.axis('equal')
+            plt.xlabel('Distance from Start (meters)', fontsize=14, color='black')
+            plt.ylabel('Road Elevation (meters)', fontsize=14, color='black')
 
             plt.plot(
                 [x for x, h in section],
-                [h - 2 for x, h in section],
-                color=color, linestyle='-', linewidth=1.5, alpha=0.9
+                [h for x, h in section],
+                color=color, linestyle='-', linewidth=2.5, alpha=0.9
             )
-        plt.show()
+
+        ax.set_title('Elevation Profile', fontdict={"size": 24})
+        ax.grid('equal')
+        ax.yaxis.grid(True, linestyle='--', linewidth=1, color='gray', alpha=0.3)
+        ax.xaxis.grid(True, linestyle='--', linewidth=1, color='gray', alpha=0.3)
+        # ax.yaxis.grid(False)
+
+        yticks = list(range(
+            math.floor(min(actual_road_rough_elevation[:, 1])),
+            math.ceil(max(actual_road_rough_elevation[:, 1])) + 1 + 4,
+        ))
+        xticks = list(range(
+            math.floor(min(actual_road_rough_elevation[:, 0])),
+            math.ceil(max(actual_road_rough_elevation[:, 0])) + 1,
+            100
+        ))
+        print(yticks)
+        plt.yticks(yticks, fontsize=12)
+        plt.xticks(xticks, fontsize=12)
+        plt.savefig("Figure_elevation_profile_sections.svg")
+        # plt.show()
