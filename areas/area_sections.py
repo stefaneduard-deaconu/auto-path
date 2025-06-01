@@ -400,8 +400,8 @@ class AreaSections:
         cax = divider.append_axes('right', size='5%', pad=0.15)
         cbar = fig.colorbar(im, cax=cax, orientation='vertical')
         # plot objective TODO Ed, pass more args
-        if plot_objective:
-            self._plot_objective_3d(fig=fig, ax=ax)
+        # if plot_objective:
+        #     self._plot_objective_2d(fig=fig, ax=ax)
 
     def _plot_objective(self,
                         start: np.array = None,

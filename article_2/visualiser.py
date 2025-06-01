@@ -180,26 +180,35 @@ def plot_inclination(path3d: np.array,
 
 class Visualiser:
     def __init__(self, e: Experiment):
-        self.area_section = e.area_sections
+        self.area_sections = e.area_sections
         self.area = e.area
 
-    def visualise_terrain(self):
+    def visualise_terrain_2d(self, path: np.array = None):
+        fig, ax = create_subplots(1, 1, figsize=(10, 10))
+        self.area_sections.plot_selected_sections(
+            noshow=True, ax=ax, fig=fig
+        )
+        if path is not None:
+            ax.plot(*zip(*path), color='red', linewidth=2)
+        return fig, ax
+
+    def visualise_terrain_3d(self):
         fig, ax = create_3d_subplots(1, 1, figsize=(6, 6))
         ax.set_title('Terrain as a 3D Grid')  # TODO Ed, can you use inclination instead of height for colormap?
         self.area.plot_terrain_3d(fig=fig, ax=ax, noshow=True, horizontal_ratio=1)
         set_axes_equal(ax)
         fig.tight_layout()
-        # plt.show()
+        plt.show()
         plt.savefig('Figure_1_terrain_3d.svg')
 
     def visualise_radii(self, path: np.array):
         fig, ax = create_subplots(1, 1, figsize=figsize)
         ax.set_title('Figure . - Horizontal curves')
         plot_horizontal_curves(path, fig=fig, ax=ax)
-        plt.show()
+        return fig, ax
 
-    def visualise_elevation_profile(self, path2d: np.array):
-        path3d = np.array(self.area_section.interpolate_path_height(path2d))
+    def visualise_elevation_profile(self, path2d: np.array, s_value: float = 100):
+        path3d = np.array(self.area_sections.interpolate_path_height(path2d))
 
         # TODO Stefan, move this to right place
         # function to compute 2D elevation profile from 3D path
@@ -239,10 +248,10 @@ class Visualiser:
 
         actual_road_rough_elevation = compute_elevation_profile(path3d)
 
-        loosely_interpolated_path = interpolate_2d_path_v2(path3d, multiplier=4, s=100)
-        actual_road_may_be = compute_elevation_profile(loosely_interpolated_path)
+        loosely_interpolated_path = interpolate_2d_path_v2(path3d, multiplier=4, s=s_value)
+        actual_road_may_be_elevation = compute_elevation_profile(loosely_interpolated_path)
 
-        # plt.plot(*zip(*actual_road_may_be), color='black', linestyle='-', linewidth=1.5, alpha=0.9)
+        # plt.plot(*zip(*actual_road_may_be_elevation), color='black', linestyle='-', linewidth=1.5, alpha=0.9)
         def get_elevation_profile_sections(path2d: np.array) -> list[np.array]:
             sections: list[list] = [list(path2d[:2])]
             for pt1, pt2, pt3 in zip(path2d, path2d[1:], path2d[2:]):
@@ -265,12 +274,12 @@ class Visualiser:
                 alpha=0.6)
 
         maximum_road_h = max(actual_road_rough_elevation[:, 1])
-        for section in get_elevation_profile_sections(actual_road_may_be):
+        for section in get_elevation_profile_sections(actual_road_may_be_elevation):
             d = section[-1][1] - section[0][1]
             color = 'red' if d < 0 else 'green'
 
             maximum = max([
-                abs((h2 - h1) / (x2 - x1) ) * 100
+                abs((h2 - h1) / (x2 - x1)) * 100
                 for (x1, h1), (x2, h2) in zip(section, section[1:])
             ])
             inclination = round(-maximum if d < 0 else maximum, 2)
@@ -318,5 +327,7 @@ class Visualiser:
         print(yticks)
         plt.yticks(yticks, fontsize=12)
         plt.xticks(xticks, fontsize=12)
-        plt.savefig("Figure_elevation_profile_sections.svg")
-        # plt.show()
+
+        return fig, ax
+        # TODO update uses of this legacy return :)):
+        return loosely_interpolated_path, actual_road_may_be_elevation

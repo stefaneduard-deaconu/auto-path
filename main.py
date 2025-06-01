@@ -12,6 +12,8 @@ import numpy as np
 from areas.area_sections import Area, AreaSections
 from areas.area import eucl, interpolate_using_bezier_curve
 
+DIJKSTRA_FUNCTIONS = Literal['height', 'length', '3d']
+
 # if __name__ == '__main__':
 #     # # section the area by height :)
 #     # a_sections = AreaSections.from_area(area=a, height_delta=10)
@@ -237,7 +239,7 @@ class Experiment:
 
     def test_dijkstra_variants(self, cache: bool = True,
                                noshow: bool = False, save: bool = False,
-                               only_compute_based_on: Literal['height', 'length', '3d'] = None):
+                               only_compute_based_on: DIJKSTRA_FUNCTIONS = None):
         if only_compute_based_on is None:
             variants_to_compute = {'height', 'length', '3d'}
         else:

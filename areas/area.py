@@ -34,9 +34,7 @@ def get_bezier_points(pts: np.ndarray, order: int, time: float) -> np.array:
 
 
 def eucl(a: np.array, b: np.array):
-    a = np.array(a)
-    b = np.array(b)
-    return math.sqrt(np.sum((a - b) ** 2))
+    return np.linalg.norm(np.array(b) - np.array(a))
 
 
 def segment_length(pts: np.array) -> float:
@@ -72,9 +70,9 @@ class Area:
 
     @classmethod
     def from_perlin_noise(cls, seed,
-                          GRID_SIZE: tuple[int,int],
+                          GRID_SIZE: tuple[int, int],
                           scaling_argument: tuple[int, int],
-                          height_interval: tuple[int,int]):
+                          height_interval: tuple[int, int]):
         """
         Summary
 
@@ -94,9 +92,9 @@ class Area:
 
     @property
     def pts3d(self) -> list[Coord3D]:
-        return [(x,y,self.surf[x,y])
-                for x,y in itertools.product(range(self.dim1),
-                                             range(self.dim2))]
+        return [(x, y, self.surf[x, y])
+                for x, y in itertools.product(range(self.dim1),
+                                              range(self.dim2))]
 
     @property
     def shape(self):
@@ -148,10 +146,10 @@ class Area:
                        math.floor(coord[1])])
         closest_pts = [
             (i, j)
-            for i,j in [(0, 0), (0, 1), (1, 0), (1, 1)] + pt
+            for i, j in [(0, 0), (0, 1), (1, 0), (1, 1)] + pt
             if 0 <= i < len(self.surf) and 0 <= j < len(self.surf[0])
         ]
-        
+
         # x,y = zip(*closest_pts, pt)
         # z = [self.surf[i,j]
         #      for i,j in zip(x,y)]
@@ -163,7 +161,7 @@ class Area:
         # ax.scatter(x,y,z)
         # ax.scatter([coord[0]], [coord[1]], [g])
         # plt.show()
-        return g    
+        return g
 
     @classmethod
     def _plot_surf_3d(cls, z: np.array,
@@ -176,7 +174,7 @@ class Area:
                       use_tk: bool = True,
                       alpha: float = 1,
                       flip=True,
-                      horizontal_ratio: float = 1,):
+                      horizontal_ratio: float = 1, ):
         """
         TODO Also return the ax,fig,surf :)
         :param surf:
@@ -255,14 +253,14 @@ class Area:
                         axis: str = '',
                         noshow: bool = False,
                         use_tk: bool = True,
-                        horizontal_ratio: float = 1,):
+                        horizontal_ratio: float = 1, ):
         ax, fig, surf = Area._plot_surf_3d(self.surf,
                                            colormap="Blues",
                                            ax=ax,
                                            fig=fig,
                                            axis=axis,
                                            use_tk=use_tk,
-                                           horizontal_ratio=horizontal_ratio,)
+                                           horizontal_ratio=horizontal_ratio, )
         if not noshow:
             # self.show()
             plt.savefig('Figure_plot_terrain_3d.svg')
