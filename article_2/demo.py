@@ -495,7 +495,7 @@ if __name__ == '__main__':
 
                 # TODO Stefan: there is a maximum deviation e.g. 5.6285 based on WHAT? reserach this Stefan
 
-                s_value = 1
+                s_value = 0
                 prev_deviation = 0
                 curr_deviation = compute_deviation_of_loose_interpolation(s_value)
                 MAX_DEVIATION = 1/10*MIN_RADIUS
