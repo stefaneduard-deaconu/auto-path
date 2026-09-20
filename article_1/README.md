@@ -6,10 +6,14 @@
 
 [Prerequisites](..#prerequisites)
 
+### Samples
+
+[Samples: generating terrains, paths, figures and CSV files](samples/README.md)
+
 
 ## Access the Docs:
 
-[Github for Article 2](https://github.com/stefaneduard-deaconu/auto-path/tree/article-2-path-smoothing/article_2)
+[Github for Article 1](https://github.com/stefaneduard-deaconu/auto-path/tree/article-2-path-smoothing/article_1)
 
 ## TODO for enhancing the article
 

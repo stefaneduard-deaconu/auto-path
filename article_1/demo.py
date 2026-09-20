@@ -4,8 +4,8 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline, CubicHermiteSpline
 
 from areas.utils.interpolate import Coord3D, is_collinear, distance_to_line
-from article_2.visibility_calculator import VisibilityCalculator
-from article_2.visualiser import Visualiser
+from article_1.visibility_calculator import VisibilityCalculator
+from article_1.visualiser import Visualiser
 from main import *
 
 import matplotlib

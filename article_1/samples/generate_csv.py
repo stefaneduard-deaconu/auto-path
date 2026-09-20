@@ -1,4 +1,4 @@
-from generate_article_figures import save_np_to_csv, smooth_path
+from article_1.samples.generate_article_figures import save_np_to_csv, smooth_path
 from main import *
 from itertools import product
 
